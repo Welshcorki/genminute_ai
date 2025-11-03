@@ -131,7 +131,7 @@ JSON 배열만 출력하고, 추가 설명이나 마크다운 코드 블록은 �
             작업 수행:
             이제 다음 [스크립트 내용]을 분석하여 위의 요구사항을 모두 준수하는 주제별 요약본을 생성해 주십시오.
             {transcript_text}"""
-        
+
         print(f"======prompt_text========")
         print(prompt_text)
 
@@ -162,6 +162,124 @@ JSON 배열만 출력하고, 추가 설명이나 마크다운 코드 블록은 �
             import traceback
             traceback.print_exc()
             print(f"❌ Gemini 요약 생성 중 오류 발생: {e}")
+            return None
+
+    def generate_minutes(self, title: str, transcript_text: str, summary_content: str):
+        """
+        문단 요약을 기반으로 정식 회의록을 생성합니다.
+
+        Args:
+            title (str): 회의 제목
+            transcript_text (str): 원본 회의 스크립트
+            summary_content (str): 이미 생성된 문단 요약 내용
+
+        Returns:
+            str: 생성된 회의록 내용 (마크다운 형식)
+        """
+        prompt_text = f"""당신은 회의록을 전문적으로 작성하는 AI 어시스턴트입니다.
+아래 제공되는 "회의 스크립트"와 "문단 요약"을 분석하여, 주어진 "마크다운 템플릿"의 각 항목을 채워주세요.
+
+스크립트에서 직접 추출 불가능한 정보(예: 회의명, 일시, 기한)는 스크립트 내용을 바탕으로 적절히 추정하거나,
+추정이 불가능하면 '미정' 또는 '정보 없음'으로 표시해주세요.
+
+
+--- 회의 제목 ---
+{title}
+--------------------
+
+
+--- 문단 요약 ---
+{summary_content}
+--------------------
+
+
+--- 회의 스크립트 ---
+{transcript_text}
+--------------------
+
+
+--- 마크다운 템플릿 (이 형식 정확히 따르세요) ---
+
+# {{회의명}}
+
+**일시**: {{일시}}
+**참석자**: {{참석자}}
+
+---
+
+## 회의 요약
+{{회의 전체 내용을 1~2줄로 간략히 요약하여, 주요 논의 방향과 핵심 결론을 함께 제시}}
+
+---
+
+## 핵심 논의 내용
+
+### {{첫 번째 핵심 주제}}
+{{해당 주제에 대한 논의 내용(현황, 주요 발언, 의견, 결론 등)}}
+
+### {{두 번째 핵심 주제}}
+{{해당 주제에 대한 논의 내용(현황, 주요 발언, 의견, 결론 등)}}
+
+*(필요 시 주제 추가)*
+
+---
+
+## 액션 아이템
+{{회의 결과를 바탕으로 자동 분담된 업무를 명확히 기재}}
+
+{{수행할 일 1: 담당자, 목적, 기한}}
+{{수행할 일 2: 담당자, 목적, 기한}}
+
+*(필요 시 항목 추가)*
+
+---
+
+## 향후 계획
+{{결정 사항에 따른 후속 단계, 우선순위, 마감일 등을 간결히 정리}}
+{{다음 회의에서 논의할 예정인 항목이나 보완 필요 사항 명시}}
+
+---
+
+[중요 출력 규칙]
+- 절대로 서론, 인사, 부연 설명을 포함하지 마세요.
+- 응답은 반드시 마크다운 제목인 '#'으로 시작해야 합니다.
+- 오직 주어진 템플릿 형식에 맞춰 내용만 채워서 응답을 생성하세요.
+- **모든 내용은 회의록 양식에 맞게, 구어체가 아닌 간결하고 명료한 서술체로 작성하세요.**
+- 만약 특정 정보가 스크립트에 없으면 해당 섹션에 '정보 없음' 또는 '미정'으로 표시하세요.
+- {{}}는 실제 내용으로 채워서 표시하지 마세요.
+##############################
+"""
+
+        print(f"======회의록 생성 prompt========")
+        print(prompt_text[:500] + "...")
+
+        api_key = os.environ.get("GOOGLE_API_KEY")
+        if not api_key:
+            raise ValueError("GOOGLE_API_KEY가 .env 파일에 설정되지 않았습니다.")
+
+        client = genai.Client(api_key=api_key)
+        model = "gemini-2.5-pro"
+
+        print("🤖 Gemini를 통해 회의록 생성 중...")
+        try:
+            response = client.models.generate_content(
+                model=model,
+                contents=[
+                    types.Content(
+                        role="user",
+                        parts=[
+                            types.Part.from_text(text=prompt_text),
+                        ],
+                    ),
+                ],
+            )
+            minutes_content = response.text.strip()
+            print("✅ Gemini 회의록 생성 완료.")
+            return minutes_content
+        except Exception as e:
+            import traceback
+            traceback.print_exc()
+            print(f"❌ Gemini 회의록 생성 중 오류 발생: {e}")
             return None
         
 

@@ -14,9 +14,37 @@
             <audio id="audio-player" controls></audio>
         </div>
 
-        <main id="transcript-container" class="transcript-container">
-            <p>데이터를 불러오는 중입니다...</p>
-        </main>
+        <!-- 탭 네비게이션 -->
+        <div class="tabs-container">
+            <button class="tab-button active" data-tab="script">스크립트</button>
+            <button class="tab-button" data-tab="summary">문단 요약</button>
+            <button class="tab-button" data-tab="minutes">회의록</button>
+        </div>
+
+        <!-- 탭 컨텐츠 -->
+        <div class="tab-content-container">
+            <!-- 스크립트 탭 -->
+            <div id="script-tab" class="tab-content active">
+                <div id="transcript-container" class="transcript-container">
+                    <p>데이터를 불러오는 중입니다...</p>
+                </div>
+            </div>
+
+            <!-- 문단 요약 탭 -->
+            <div id="summary-tab" class="tab-content">
+                <div id="summary-container" class="summary-container">
+                    <p class="summary-placeholder">요약하기 버튼을 눌러 회의 내용을 요약하세요.</p>
+                </div>
+            </div>
+
+            <!-- 회의록 탭 -->
+            <div id="minutes-tab" class="tab-content">
+                <div id="minutes-container" class="minutes-container">
+                    <p class="minutes-placeholder">문단 요약 생성 후, 회의록 생성 버튼을 눌러주세요.</p>
+                    <button id="generate-minutes-button" class="btn-primary" style="display: none; margin-top: 1rem;">회의록 생성</button>
+                </div>
+            </div>
+        </div>
     </div>
 </main>
 {% endblock %}

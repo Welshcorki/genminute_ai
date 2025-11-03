@@ -10,6 +10,7 @@ from dotenv import load_dotenv
 from utils.stt import STTManager
 from utils.db_manager import DatabaseManager
 from utils.vector_db_manager import vdb_manager
+from utils.validation import validate_title, parse_meeting_date
 
 # --- 기본 설정 및 초기화 ---
 app = Flask(__name__)
@@ -41,14 +42,23 @@ def index():
 
 @app.route("/upload", methods=["POST"])
 def upload_and_process():
+    # 제목 검증
+    title = request.form.get('title', '').strip()
+    is_valid, error_message = validate_title(title)
+    if not is_valid:
+        return render_template("index.html", error=error_message)
+
+    # 오디오 파일 검증
     if 'audio_file' not in request.files:
         return render_template("index.html", error="오디오 파일이 없습니다.")
-    
-    file = request.files['audio_file']
-    title = request.form.get('title', '제목 없음')
 
+    file = request.files['audio_file']
     if file.filename == '' or not allowed_file(file.filename):
         return render_template("index.html", error="파일이 없거나 허용되지 않는 형식입니다.")
+
+    # 회의 일시 처리 (입력이 없으면 현재 시간 자동 설정)
+    meeting_date_input = request.form.get('meeting_date', '')
+    meeting_date = parse_meeting_date(meeting_date_input)
 
     try:
         filename = secure_filename(file.filename)
@@ -60,22 +70,22 @@ def upload_and_process():
         if not segments:
             return render_template("index.html", error="음성 인식에 실패했습니다. API 키 등을 확인해주세요.")
 
-        # 1. SQLite DB에 개별 대화 저장
-        meeting_id = db.save_stt_to_db(segments, filename, title)
+        # 1. SQLite DB에 개별 대화 저장 (meeting_date 전달)
+        meeting_id = db.save_stt_to_db(segments, filename, title, meeting_date)
 
-        # 2. Vector DB에 전체 대화록을 단일 chunk로 저장
+        # 2. Vector DB에 대화록을 의미적 청크로 저장
         try:
             all_segments = db.get_segments_by_meeting_id(meeting_id)
             if all_segments:
-                full_text = " ".join([s['segment'] for s in all_segments])
                 # 메타데이터는 첫 번째 세그먼트에서 가져옴
                 first_segment = all_segments[0]
+                # segments를 직접 전달하여 의미적 청킹 수행
                 vdb_manager.add_meeting_as_chunk(
                     meeting_id=meeting_id,
                     title=first_segment['title'],
                     meeting_date=first_segment['meeting_date'],
                     audio_file=first_segment['audio_file'],
-                    full_text=full_text
+                    segments=all_segments  # 전체 segments 전달
                 )
         except Exception as vdb_error:
             print(f"Vector DB 저장 중 오류 발생: {vdb_error}")
@@ -226,6 +236,101 @@ def summary_template_page():
 def retriever_page():
     """리트리버 테스트 페이지를 렌더링합니다."""
     return render_template("retriever.html")
+
+@app.route("/api/check_summary/<string:meeting_id>", methods=["GET"])
+def check_summary(meeting_id):
+    """문단 요약 존재 여부 확인 API"""
+    try:
+        # Vector DB에서 문단 요약 조회
+        summary_content = vdb_manager.get_summary_by_meeting_id(meeting_id)
+
+        if summary_content:
+            return jsonify({
+                "success": True,
+                "has_summary": True,
+                "summary": summary_content
+            })
+        else:
+            return jsonify({
+                "success": True,
+                "has_summary": False,
+                "message": "문단 요약이 아직 생성되지 않았습니다."
+            })
+
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return jsonify({"success": False, "error": f"요약 조회 중 오류 발생: {str(e)}"}), 500
+
+@app.route("/api/get_minutes/<string:meeting_id>", methods=["GET"])
+def get_minutes(meeting_id):
+    """회의록 조회 API - SQLite DB에서 저장된 회의록을 조회합니다."""
+    try:
+        # DB에서 회의록 조회
+        minutes_data = db.get_minutes_by_meeting_id(meeting_id)
+
+        if minutes_data:
+            return jsonify({
+                "success": True,
+                "has_minutes": True,
+                "minutes": minutes_data['minutes_content'],
+                "created_at": minutes_data['created_at'],
+                "updated_at": minutes_data['updated_at']
+            })
+        else:
+            return jsonify({
+                "success": True,
+                "has_minutes": False,
+                "message": "회의록이 아직 생성되지 않았습니다."
+            })
+
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return jsonify({"success": False, "error": f"회의록 조회 중 오류 발생: {str(e)}"}), 500
+
+@app.route("/api/generate_minutes/<string:meeting_id>", methods=["POST"])
+def generate_minutes(meeting_id):
+    """회의록 생성 API - 문단 요약을 기반으로 정식 회의록을 생성하고 DB에 저장합니다."""
+    try:
+        # 1. meeting_id로 회의록 내용 조회
+        rows = db.get_meeting_by_id(meeting_id)
+        if not rows:
+            return jsonify({"success": False, "error": "해당 회의를 찾을 수 없습니다."}), 404
+
+        # 2. title, meeting_date, transcript_text 추출
+        title = rows[0]['title']
+        meeting_date = rows[0]['meeting_date']
+        transcript_text = " ".join([row['segment'] for row in rows])
+
+        # 3. vector DB에서 문단 요약 내용 가져오기 (summary_index 순서대로)
+        summary_content = vdb_manager.get_summary_by_meeting_id(meeting_id)
+
+        if not summary_content:
+            return jsonify({
+                "success": False,
+                "error": "먼저 '요약하기' 버튼을 눌러 문단 요약을 생성해주세요."
+            }), 400
+
+        # 4. stt_manager의 generate_minutes를 이용해 회의록 생성
+        minutes_content = stt_manager.generate_minutes(title, transcript_text, summary_content)
+
+        if not minutes_content:
+            return jsonify({"success": False, "error": "회의록 생성에 실패했습니다."}), 500
+
+        # 5. 생성된 회의록을 SQLite DB에 저장
+        db.save_minutes(meeting_id, title, meeting_date, minutes_content)
+
+        return jsonify({
+            "success": True,
+            "message": "회의록이 성공적으로 생성 및 저장되었습니다.",
+            "minutes": minutes_content
+        })
+
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return jsonify({"success": False, "error": f"회의록 생성 중 오류 발생: {str(e)}"}), 500
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5050, debug=True)

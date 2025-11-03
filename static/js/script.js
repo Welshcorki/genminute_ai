@@ -17,6 +17,8 @@ document.addEventListener('DOMContentLoaded', () => {
         const fileInput = document.getElementById('audio-file-input');
         const fileNameDisplay = document.getElementById('file-name-display');
         const sttSubmitButton = document.querySelector('button[type="submit"]');
+        const titleInput = document.querySelector('input[name="title"]');
+        const meetingDateInput = document.getElementById('meeting-date-input');
 
         // '파일 선택' 버튼 클릭
         if (uploadButton) {
@@ -26,7 +28,11 @@ document.addEventListener('DOMContentLoaded', () => {
         // 파일이 직접 선택되었을 때
         if (fileInput) {
             fileInput.addEventListener('change', () => {
-                if (fileInput.files.length > 0) handleFile(fileInput.files[0]);
+                if (fileInput.files.length > 0) {
+                    handleFile(fileInput.files[0]);
+                    // 회의 일시가 비어있으면 현재 날짜/시간 자동 입력
+                    autoFillMeetingDate();
+                }
             });
         }
 
@@ -47,18 +53,29 @@ document.addEventListener('DOMContentLoaded', () => {
                 if (files.length > 0) {
                     fileInput.files = files;
                     handleFile(files[0]);
+                    // 회의 일시가 비어있으면 현재 날짜/시간 자동 입력
+                    autoFillMeetingDate();
                 }
             });
         }
         
         // 폼 제출 시 유효성 검사 및 로딩 상태 표시
         uploadForm.addEventListener('submit', (event) => {
-            if (fileInput.files.length === 0) {
+            // 제목 입력 검증
+            if (!titleInput || titleInput.value.trim() === '') {
                 event.preventDefault(); // 폼 제출을 막고 경고창을 띄움
-                alert('파일을 선택해 주세요');
+                alert('제목을 입력해 주세요.');
                 return;
             }
-            // 파일이 있으면 버튼 상태를 변경하고 폼 제출 진행
+
+            // 파일 선택 검증
+            if (fileInput.files.length === 0) {
+                event.preventDefault(); // 폼 제출을 막고 경고창을 띄움
+                alert('파일을 선택해 주세요.');
+                return;
+            }
+
+            // 모든 검증 통과 시 버튼 상태를 변경하고 폼 제출 진행
             if(sttSubmitButton) {
                 sttSubmitButton.textContent = '처리 중...';
                 sttSubmitButton.disabled = true;
@@ -79,6 +96,22 @@ document.addEventListener('DOMContentLoaded', () => {
                 fileNameDisplay.textContent = '지원하지 않는 파일 형식입니다.';
                 fileNameDisplay.style.color = '#e74c3c';
                 fileInput.value = '';
+            }
+        }
+
+        // 회의 일시 자동 입력 함수
+        function autoFillMeetingDate() {
+            if (meetingDateInput && !meetingDateInput.value) {
+                // 현재 날짜/시간을 datetime-local 형식으로 변환 (YYYY-MM-DDTHH:MM)
+                const now = new Date();
+                const year = now.getFullYear();
+                const month = String(now.getMonth() + 1).padStart(2, '0');
+                const day = String(now.getDate()).padStart(2, '0');
+                const hours = String(now.getHours()).padStart(2, '0');
+                const minutes = String(now.getMinutes()).padStart(2, '0');
+
+                const formattedDateTime = `${year}-${month}-${day}T${hours}:${minutes}`;
+                meetingDateInput.value = formattedDateTime;
             }
         }
     }

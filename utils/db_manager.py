@@ -60,9 +60,10 @@ class DatabaseManager:
         conn = self._get_connection()
         cursor = conn.cursor()
         cursor.execute("""
-            SELECT meeting_id, title, MAX(meeting_date) as date 
-            FROM meeting_dialogues 
-            GROUP BY meeting_id 
+            SELECT meeting_id, title, MAX(meeting_date) as date,
+                   (SELECT audio_file FROM meeting_dialogues WHERE meeting_id = md.meeting_id LIMIT 1) as audio_file
+            FROM meeting_dialogues md
+            GROUP BY meeting_id
             ORDER BY date DESC
         """)
         meetings = cursor.fetchall()
@@ -196,3 +197,55 @@ class DatabaseManager:
 
         print(f"✅ DB 삭제 완료: {deleted_rows}개 행 삭제됨")
         return deleted_rows
+
+    def delete_meeting_by_id(self, meeting_id):
+        """
+        meeting_id로 회의와 관련된 모든 데이터를 삭제합니다.
+        - meeting_dialogues 테이블에서 세그먼트 삭제
+        - meeting_minutes 테이블에서 회의록 삭제
+
+        Args:
+            meeting_id (str): 삭제할 회의 ID
+
+        Returns:
+            dict: 삭제된 항목 수 정보 {"dialogues": int, "minutes": int}
+        """
+        conn = self._get_connection()
+        cursor = conn.cursor()
+
+        # 1. meeting_dialogues에서 삭제
+        cursor.execute("DELETE FROM meeting_dialogues WHERE meeting_id = ?", (meeting_id,))
+        deleted_dialogues = cursor.rowcount
+
+        # 2. meeting_minutes에서 삭제 (테이블이 존재하는 경우)
+        cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='meeting_minutes'")
+        deleted_minutes = 0
+        if cursor.fetchone():
+            cursor.execute("DELETE FROM meeting_minutes WHERE meeting_id = ?", (meeting_id,))
+            deleted_minutes = cursor.rowcount
+
+        conn.commit()
+        conn.close()
+
+        print(f"✅ SQLite DB 삭제 완료: dialogues={deleted_dialogues}개, minutes={deleted_minutes}개")
+        return {"dialogues": deleted_dialogues, "minutes": deleted_minutes}
+
+    def get_audio_file_by_meeting_id(self, meeting_id):
+        """
+        meeting_id로 오디오 파일명을 조회합니다.
+
+        Args:
+            meeting_id (str): 회의 ID
+
+        Returns:
+            str or None: 오디오 파일명, 없으면 None
+        """
+        conn = self._get_connection()
+        cursor = conn.cursor()
+        cursor.execute("SELECT audio_file FROM meeting_dialogues WHERE meeting_id = ? LIMIT 1", (meeting_id,))
+        row = cursor.fetchone()
+        conn.close()
+
+        if row:
+            return row['audio_file']
+        return None

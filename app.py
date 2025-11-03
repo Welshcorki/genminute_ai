@@ -332,5 +332,66 @@ def generate_minutes(meeting_id):
         traceback.print_exc()
         return jsonify({"success": False, "error": f"회의록 생성 중 오류 발생: {str(e)}"}), 500
 
+@app.route("/api/delete_meeting/<string:meeting_id>", methods=["POST"])
+def delete_meeting(meeting_id):
+    """
+    회의와 관련된 모든 데이터를 삭제합니다.
+    - SQLite DB: meeting_dialogues, meeting_minutes
+    - Vector DB: meeting_chunk, meeting_subtopic
+    - 오디오 파일
+    """
+    try:
+        # 1. meeting_id로 오디오 파일명 조회
+        audio_file = db.get_audio_file_by_meeting_id(meeting_id)
+
+        if not audio_file:
+            return jsonify({"success": False, "error": "해당 회의를 찾을 수 없습니다."}), 404
+
+        # 2. SQLite DB에서 삭제
+        deleted_sqlite = db.delete_meeting_by_id(meeting_id)
+
+        # 3. Vector DB에서 삭제 (meeting_chunk)
+        try:
+            vdb_manager.delete_from_collection(
+                db_type="chunk",
+                meeting_id=meeting_id
+            )
+            print(f"✅ Vector DB (meeting_chunk) 삭제 완료")
+        except Exception as e:
+            print(f"⚠️ Vector DB (meeting_chunk) 삭제 중 오류: {e}")
+
+        # 4. Vector DB에서 삭제 (meeting_subtopic)
+        try:
+            vdb_manager.delete_from_collection(
+                db_type="subtopic",
+                meeting_id=meeting_id
+            )
+            print(f"✅ Vector DB (meeting_subtopic) 삭제 완료")
+        except Exception as e:
+            print(f"⚠️ Vector DB (meeting_subtopic) 삭제 중 오류: {e}")
+
+        # 5. 오디오 파일 삭제
+        audio_path = os.path.join(app.config["UPLOAD_FOLDER"], audio_file)
+        if os.path.exists(audio_path):
+            os.remove(audio_path)
+            print(f"✅ 오디오 파일 삭제 완료: {audio_file}")
+        else:
+            print(f"⚠️ 오디오 파일을 찾을 수 없음: {audio_file}")
+
+        return jsonify({
+            "success": True,
+            "message": "회의 데이터가 성공적으로 삭제되었습니다.",
+            "deleted": {
+                "sqlite_dialogues": deleted_sqlite["dialogues"],
+                "sqlite_minutes": deleted_sqlite["minutes"],
+                "audio_file": audio_file
+            }
+        })
+
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return jsonify({"success": False, "error": f"삭제 중 오류 발생: {str(e)}"}), 500
+
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5050, debug=True)

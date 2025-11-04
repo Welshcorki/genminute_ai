@@ -636,26 +636,66 @@ class VectorDBManager:
         deleted_sqlite = self.db_manager.delete_meeting_by_id(meeting_id)
 
         # 3. Vector DB chunks 삭제
+        deleted_chunks_count = 0
         try:
-            chunks_collection = self.client.get_or_create_collection(name=self.COLLECTION_NAMES['chunks'])
-            chunks_collection.delete(where={"meeting_id": meeting_id})
-            print(f"✅ Vector DB (meeting_chunks) 삭제 완료")
+            # LangChain vectorstore의 underlying collection 사용
+            chunks_collection = self.vectorstores['chunks']._collection
+
+            # 삭제 전 데이터 확인
+            before_delete = chunks_collection.get(where={"meeting_id": meeting_id}, limit=1)
+            if before_delete and before_delete.get('ids'):
+                print(f"🔍 삭제 대상 발견: meeting_id={meeting_id} (chunks)")
+                # 삭제 실행
+                chunks_collection.delete(where={"meeting_id": meeting_id})
+
+                # 삭제 후 확인
+                after_delete = chunks_collection.get(where={"meeting_id": meeting_id}, limit=1)
+                if not after_delete.get('ids'):
+                    print(f"✅ Vector DB (meeting_chunks) 삭제 완료")
+                    deleted_chunks_count = len(before_delete['ids'])
+                else:
+                    print(f"⚠️ Vector DB (meeting_chunks) 삭제 실패: 일부 데이터가 남아있음")
+            else:
+                print(f"ℹ️ Vector DB (meeting_chunks)에 meeting_id={meeting_id} 데이터 없음")
         except Exception as e:
             print(f"⚠️ Vector DB (meeting_chunks) 삭제 중 오류: {e}")
+            import traceback
+            traceback.print_exc()
 
         # 4. Vector DB subtopic 삭제
+        deleted_subtopic_count = 0
         try:
-            subtopic_collection = self.client.get_or_create_collection(name=self.COLLECTION_NAMES['subtopic'])
-            subtopic_collection.delete(where={"meeting_id": meeting_id})
-            print(f"✅ Vector DB (meeting_subtopic) 삭제 완료")
+            # LangChain vectorstore의 underlying collection 사용
+            subtopic_collection = self.vectorstores['subtopic']._collection
+
+            # 삭제 전 데이터 확인
+            before_delete = subtopic_collection.get(where={"meeting_id": meeting_id}, limit=1)
+            if before_delete and before_delete.get('ids'):
+                print(f"🔍 삭제 대상 발견: meeting_id={meeting_id} (subtopic)")
+                # 삭제 실행
+                subtopic_collection.delete(where={"meeting_id": meeting_id})
+
+                # 삭제 후 확인
+                after_delete = subtopic_collection.get(where={"meeting_id": meeting_id}, limit=1)
+                if not after_delete.get('ids'):
+                    print(f"✅ Vector DB (meeting_subtopic) 삭제 완료")
+                    deleted_subtopic_count = len(before_delete['ids'])
+                else:
+                    print(f"⚠️ Vector DB (meeting_subtopic) 삭제 실패: 일부 데이터가 남아있음")
+            else:
+                print(f"ℹ️ Vector DB (meeting_subtopic)에 meeting_id={meeting_id} 데이터 없음")
         except Exception as e:
             print(f"⚠️ Vector DB (meeting_subtopic) 삭제 중 오류: {e}")
+            import traceback
+            traceback.print_exc()
 
         # 5. 오디오 파일 삭제
         audio_path = os.path.join(self.upload_folder, audio_file)
+        audio_deleted = False
         if os.path.exists(audio_path):
             os.remove(audio_path)
             print(f"✅ 오디오 파일 삭제 완료: {audio_file}")
+            audio_deleted = True
         else:
             print(f"⚠️ 오디오 파일을 찾을 수 없음: {audio_file}")
 
@@ -665,7 +705,9 @@ class VectorDBManager:
             "deleted": {
                 "sqlite_dialogues": deleted_sqlite["dialogues"],
                 "sqlite_minutes": deleted_sqlite["minutes"],
-                "audio_file": audio_file
+                "vector_chunks": deleted_chunks_count,
+                "vector_subtopic": deleted_subtopic_count,
+                "audio_file": audio_file if audio_deleted else None
             }
         }
 

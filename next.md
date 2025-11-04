@@ -1,6 +1,6 @@
 # Minute AI - 인수인계 문서
 
-## 📅 마지막 업데이트: 2025-11-03
+## 📅 마지막 업데이트: 2025-11-04
 
 ---
 
@@ -8,13 +8,14 @@
 
 **Minute AI**는 회의 음성을 텍스트로 변환하고, AI 기반으로 요약 및 회의록을 자동 생성하는 Flask 웹 애플리케이션입니다.
 
-### 핵심 기능
+### 핵심 기능 (✅ 모두 완료)
 - 🎤 **STT (Speech-to-Text)**: Whisper API로 음성 인식 및 화자 분리
 - 📝 **Smart Chunking**: 화자/시간 기반 의미적 청킹
 - 🤖 **AI 요약**: Gemini API로 소주제별 요약 생성
 - 📄 **회의록 생성**: RAG 기반 구조화된 회의록 작성
 - 🔍 **검색 시스템**: 4가지 retriever 타입 지원
-- 🗑️ **노트 삭제**: 모든 관련 데이터 일괄 삭제
+- 💬 **AI 챗봇**: 회의 내용 질의응답 (Self-query retriever 기반)
+- 🗑️ **노트 삭제**: 개별/일괄 삭제 기능 + 삭제 검증 로그
 
 ---
 
@@ -29,17 +30,19 @@ minute_ai/
 │   ├── stt.py                 # Whisper STT & Gemini 처리
 │   ├── db_manager.py          # SQLite 작업 관리
 │   ├── vector_db_manager.py   # ChromaDB 벡터 DB 관리
+│   ├── chat_manager.py        # 챗봇 로직 (NEW: 2025-11-04)
 │   └── validation.py          # 입력 유효성 검사
 ├── templates/
-│   ├── layout.html            # 공통 레이아웃
-│   ├── index.html             # 업로드 페이지
-│   ├── notes.html             # 모든 노트 목록 (삭제 기능 포함)
+│   ├── layout.html            # 공통 레이아웃 (챗봇 UI 포함)
+│   ├── index.html             # 업로드 페이지 (프로그레스바 포함)
+│   ├── notes.html             # 모든 노트 목록 (일괄 삭제 기능 포함)
 │   ├── viewer.html            # 회의록 뷰어
 │   └── retriever.html         # 검색 테스트 페이지
 ├── static/
 │   ├── css/
-│   │   └── style.css
+│   │   └── style.css          # 전체 스타일 (챗봇 UI 포함)
 │   └── js/
+│       ├── script.js          # 전역 스크립트 (챗봇 로직 포함)
 │       └── viewer.js          # 뷰어 인터랙션
 ├── uploads/                    # 업로드된 오디오 파일
 ├── FLOWCHART.md               # 시스템 아키텍처 문서
@@ -56,7 +59,7 @@ minute_ai/
 ```sql
 CREATE TABLE meeting_dialogues (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
-    meeting_id TEXT NOT NULL,
+    meeting_id TEXT NOT NULL,           -- 🔑 삭제 키값
     meeting_date DATETIME NOT NULL,
     speaker_label TEXT NOT NULL,
     start_time REAL NOT NULL,
@@ -70,7 +73,7 @@ CREATE TABLE meeting_dialogues (
 #### 2. `meeting_minutes` 테이블
 ```sql
 CREATE TABLE meeting_minutes (
-    meeting_id TEXT PRIMARY KEY,
+    meeting_id TEXT PRIMARY KEY,        -- 🔑 삭제 키값
     title TEXT NOT NULL,
     meeting_date TEXT NOT NULL,
     minutes_content TEXT NOT NULL,
@@ -87,7 +90,7 @@ CREATE TABLE meeting_minutes (
 - **메타데이터**:
   ```python
   {
-      "meeting_id": str,
+      "meeting_id": str,        # 🔑 삭제 키값
       "title": str,
       "meeting_date": str,
       "audio_file": str,
@@ -104,7 +107,7 @@ CREATE TABLE meeting_minutes (
 - **메타데이터**:
   ```python
   {
-      "meeting_id": str,
+      "meeting_id": str,        # 🔑 삭제 키값
       "title": str,
       "meeting_date": str,
       "audio_file": str
@@ -113,478 +116,159 @@ CREATE TABLE meeting_minutes (
 
 ---
 
-## 🔄 데이터 처리 파이프라인
+## 🆕 최근 구현 내용 (2025-11-04)
 
-### 1️⃣ 업로드 & STT 처리
-```
-오디오 파일 업로드
-    ↓
-Whisper API 음성 인식
-    ↓
-화자 분리 (Diarization)
-    ↓
-세그먼트 생성
-    ├─ speaker_label
-    ├─ segment (text)
-    ├─ start_time
-    └─ end_time
-```
+### 1️⃣ AI 챗봇 시스템 (완료)
 
-### 2️⃣ Smart Chunking 프로세스
+**구현 파일**: `utils/chat_manager.py`
+
+**핵심 클래스**: `ChatManager`
 ```python
-# utils/vector_db_manager.py의 _create_smart_chunks()
-
-청크 분리 조건:
-1. 청크 크기 > 1000자
-2. 시간 간격 > 60초
-3. 화자 변경 + 현재 청크 > 500자
-
-처리 순서:
-1. 세그먼트를 [Speaker X, MM:SS] 형식으로 포맷팅
-2. Gemini 2.5 Flash로 메타데이터 제거 (텍스트만 남김)
-3. OpenAI Embedding 생성
-4. Vector DB (meeting_chunk)에 저장
+class ChatManager:
+    def search_documents(query, meeting_id)  # chunks(3개) + subtopic(3개) 검색
+    def format_context(search_results)       # 검색 결과 포맷팅
+    def generate_answer(query, context)      # Gemini 2.5 Flash로 답변 생성
+    def process_query(query, meeting_id)     # 전체 파이프라인
 ```
 
-### 3️⃣ 문단 요약 생성
-```
-전체 스크립트 조회 (SQLite)
-    ↓
-Gemini API: subtopic_generate()
-    ├─ 주요 주제 식별
-    ├─ 소주제별 분류
-    └─ 요약문 생성
-    ↓
-Vector DB (meeting_subtopic)에 저장
-```
+**API 엔드포인트**: `POST /api/chat` (`app.py:421-451`)
 
-### 4️⃣ 회의록 생성
-```
-Vector DB에서 청킹된 문서 조회
-    └─ ORDER BY chunk_index ASC
-    ↓
-Gemini API: generate_minutes()
-    ├─ Input: 제목, 전체 스크립트, 청크 배열
-    ├─ Process: 구조화된 회의록 작성
-    └─ Output: Markdown 형식
-    ↓
-SQLite DB (meeting_minutes)에 저장
-    ↓
-뷰어에서 HTML로 변환하여 표시
-```
+**UI 위치**: `layout.html:28-52`
+- 우측 상단 🤖 토글 버튼 (드래그 가능)
+- 클릭 시 400px 사이드바 슬라이드
+- sessionStorage로 대화 내역 유지
+
+**특징**:
+- ✅ Self-query retriever 사용
+- ✅ meeting_chunk + meeting_subtopic 병합 검색 (각 3개씩)
+- ✅ Gemini 2.5 Flash로 답변 생성
+- ✅ 출처 정보 포함
+- ✅ 전체 페이지에서 사용 가능
 
 ---
 
-## 🔍 검색 시스템
+### 2️⃣ 노트 일괄 삭제 기능 (완료)
 
-### Retriever 타입 (4가지)
+**구현 파일**: `templates/notes.html`
 
-#### 1. Similarity Search (유사도 기반)
-```python
-{
-    "retriever_type": "similarity",
-    "k": 5
-}
+**UI 구성**:
+```
+모든 노트                    [모두선택] [삭제]
+                                ↑         ↑
+                          기본 비활성화 (회색)
+
+☐ 노트 제목          2025-11-01
+☐ 노트 제목 2        2025-11-02
 ```
 
-#### 2. MMR (Maximal Marginal Relevance)
-```python
-{
-    "retriever_type": "mmr",
-    "k": 5,
-    "mmr_fetch_k": 20,      # 초기 후보 개수
-    "mmr_lambda_mult": 0.5  # 다양성 vs 관련성 (0~1)
-}
-```
+**동작 방식**:
+1. 체크박스 선택 → 버튼 활성화
+2. "모두선택" 클릭 → 전체 선택/해제
+3. "삭제" 클릭 → 확인 모달 → 순차적으로 하나씩 삭제
+4. 콘솔에 진행 상황 출력 (`1/3 삭제 완료...`)
 
-#### 3. Self Query
-```python
-{
-    "retriever_type": "self_query",
-    "k": 5
-}
-```
+**UI 개선**:
+- ✅ 개별 삭제 X 버튼 제거 (2025-11-04)
+- 이유: 체크박스 선택 방식으로 통일하여 UX 일관성 향상
+- 모든 삭제는 체크박스 + "삭제" 버튼을 통해서만 수행
 
-#### 4. Similarity Score Threshold
-```python
-{
-    "retriever_type": "similarity",
-    "score_threshold": 0.75,  # 유사도 0.75 이상만
-    "k": 10
-}
-```
-
-### 검색 API 예시
-```python
-POST /api/search
-{
-    "query": "프로젝트 일정에 대한 논의",
-    "db_type": "chunk",  # 또는 "subtopic"
-    "retriever_type": "similarity",
-    "k": 5
-}
-```
+**코드 위치**:
+- UI: `templates/notes.html:9-30`
+- 체크박스 로직: `templates/notes.html:184-227`
+- 일괄 삭제 로직: `templates/notes.html:231-301`
 
 ---
 
-## 🆕 최근 구현: 노트 삭제 기능 (2025-11-03)
+### 3️⃣ 삭제 검증 로그 시스템 (완료)
 
-### 구현 위치
-- **UI**: `templates/notes.html`
-- **Backend**: `app.py` - `/api/delete_meeting/<meeting_id>`
-- **DB 로직**: `utils/db_manager.py` - `delete_meeting_by_id()`
+**목적**: 개발자가 삭제가 제대로 수행되었는지 터미널에서 확인
 
-### 기능 설명
-1. 모든 노트 페이지에서 각 노트 우측에 ✕ 버튼 표시
-2. 클릭 시 삭제 확인 모달 표시
-3. "예" 클릭 시 다음 데이터 모두 삭제:
-   - SQLite DB: `meeting_dialogues`, `meeting_minutes`
-   - Vector DB: `meeting_chunk`, `meeting_subtopic`
-   - 오디오 파일 (uploads 폴더)
+**구현 위치**:
+- `utils/db_manager.py:201-281` (SQLite DB 검증)
+- `utils/vector_db_manager.py:612-779` (Vector DB + 오디오 파일 검증)
 
-### 코드 위치
+**로그 구조**:
 
-**templates/notes.html (lines 16-27, 36-48, 154-221)**
-```html
-<!-- X 버튼 -->
-<button class="delete-note-btn"
-        data-meeting-id="{{ meeting.meeting_id }}"
-        data-title="{{ meeting.title }}"
-        data-audio-file="{{ meeting.audio_file }}"
-        onclick="confirmDelete(event, this)">✕</button>
+```
+======================================================================
+🗑️  [회의 데이터 삭제 프로세스 시작]
+======================================================================
+🔑 삭제 키값(meeting_id): abc-123-xyz
+📍 이 키값을 기준으로 다음 데이터를 검색하여 삭제합니다:
+   • SQLite DB - meeting_dialogues 테이블 (WHERE meeting_id = 'abc-123-xyz')
+   • SQLite DB - meeting_minutes 테이블 (WHERE meeting_id = 'abc-123-xyz')
+   • Vector DB - meeting_chunk 컬렉션 (WHERE meeting_id = 'abc-123-xyz')
+   • Vector DB - meeting_subtopic 컬렉션 (WHERE meeting_id = 'abc-123-xyz')
+   • 오디오 파일 (uploads 폴더)
+======================================================================
 
-<!-- 삭제 확인 모달 -->
-<div id="delete-modal" class="modal">...</div>
+📊 [SQLite DB 삭제 검증 시작]
+======================================================================
+[삭제 전] meeting_dialogues: 150개
+[삭제 전] meeting_minutes: 1개
+----------------------------------------------------------------------
+[삭제 수행] meeting_dialogues: 150개 삭제
+[삭제 수행] meeting_minutes: 1개 삭제
+----------------------------------------------------------------------
+[삭제 후] meeting_dialogues: 0개 남음
+[삭제 후] meeting_minutes: 0개 남음
+✅ SQLite DB 삭제 검증 성공: 모든 데이터가 삭제되었습니다.
+======================================================================
 
-<!-- JavaScript 삭제 로직 -->
-<script>
-async function confirmDelete() {
-    const response = await fetch(`/api/delete_meeting/${meetingId}`, {
-        method: 'POST',
-        body: JSON.stringify({ audio_file: audioFile })
-    });
-}
-</script>
+📊 [Vector DB Chunks 삭제 검증 시작]
+======================================================================
+[삭제 전] meeting_chunk: 20개
+----------------------------------------------------------------------
+[삭제 수행] meeting_chunk: 20개 삭제 시도
+----------------------------------------------------------------------
+[삭제 후] meeting_chunk: 0개 남음
+✅ Vector DB (meeting_chunk) 삭제 검증 성공
+======================================================================
+
+📊 [Vector DB Subtopic 삭제 검증 시작]
+======================================================================
+[삭제 전] meeting_subtopic: 5개
+----------------------------------------------------------------------
+[삭제 수행] meeting_subtopic: 5개 삭제 시도
+----------------------------------------------------------------------
+[삭제 후] meeting_subtopic: 0개 남음
+✅ Vector DB (meeting_subtopic) 삭제 검증 성공
+======================================================================
+
+📊 [오디오 파일 삭제 검증 시작]
+======================================================================
+[삭제 전] 오디오 파일 존재: sample.wav
+----------------------------------------------------------------------
+[삭제 수행] 오디오 파일 삭제 시도
+----------------------------------------------------------------------
+[삭제 후] 오디오 파일 없음
+✅ 오디오 파일 삭제 검증 성공
+======================================================================
+
+🎉 [삭제 작업 최종 요약]
+======================================================================
+✓ SQLite meeting_dialogues: 150개 삭제
+✓ SQLite meeting_minutes: 1개 삭제
+✓ Vector DB meeting_chunk: 20개 삭제
+✓ Vector DB meeting_subtopic: 5개 삭제
+✓ 오디오 파일: 삭제됨
+======================================================================
 ```
 
-**utils/db_manager.py (lines 200-250)**
-```python
-def delete_meeting_by_id(self, meeting_id):
-    """
-    meeting_id로 회의와 관련된 모든 데이터 삭제
-    - meeting_dialogues에서 세그먼트 삭제
-    - meeting_minutes에서 회의록 삭제
-    """
-    # 1. meeting_dialogues에서 삭제
-    cursor.execute("DELETE FROM meeting_dialogues WHERE meeting_id = ?", (meeting_id,))
-
-    # 2. meeting_minutes에서 삭제
-    cursor.execute("DELETE FROM meeting_minutes WHERE meeting_id = ?", (meeting_id,))
-```
-
-**app.py (lines 335-394)**
-```python
-@app.route("/api/delete_meeting/<string:meeting_id>", methods=["POST"])
-def delete_meeting(meeting_id):
-    # 1. SQLite DB에서 삭제
-    deleted_sqlite = db.delete_meeting_by_id(meeting_id)
-
-    # 2. Vector DB (meeting_chunk) 삭제
-    vdb_manager.delete_from_collection(db_type="chunk", meeting_id=meeting_id)
-
-    # 3. Vector DB (meeting_subtopic) 삭제
-    vdb_manager.delete_from_collection(db_type="subtopic", meeting_id=meeting_id)
-
-    # 4. 오디오 파일 삭제
-    os.remove(audio_path)
-```
+**삭제 키값**: 모든 삭제는 `meeting_id`를 기준으로 수행
 
 ---
 
-## 🤖 다음 작업: 챗봇 시스템 구현
+### 4️⃣ 기타 개선 사항
 
-### 목표
-회의록 AI에 지능형 챗봇을 추가하여 사용자가 자연어로 회의 내용을 질의할 수 있도록 함.
+**회의록 자동 요약**:
+- "요약하기" 버튼 제거
+- 페이지 로드 시 자동으로 문단 요약 로드
+- 위치: `templates/viewer.html:35`, `static/js/viewer.js`
 
-### 핵심 요구사항
-
-#### 1. 의도 파악 (Intent Analysis)
-```python
-User Query → Gemini 2.5 Flash 분석
-
-출력:
-{
-    "is_meeting_related": bool,
-    "intent_type": "DATE_RANGE|SPECIFIC_MEETING|TOPIC_SEARCH|...",
-    "filters": {
-        "meeting_date": "YYYY-MM-DD",
-        "title_keyword": "키워드"
-    },
-    "optimized_query": "검색 최적화 쿼리",
-    "confidence": 0.0-1.0
-}
-
-처리:
-- 회의 무관 질문 → "회의에 관련된 질문을 해주세요." 출력 후 종료
-- 날짜 질의 → metadata의 meeting_date로 범위 축소
-- 기타 → 사용 가능한 모든 metadata 활용하여 검색 정밀화
-```
-
-#### 2. 데이터 소스
-- **청킹 데이터** (meeting_chunk collection)
-- **문단 요약 데이터** (meeting_subtopic collection)
-- **두 소스 병합 및 Rerank 수행**
-
-#### 3. 답변 판정
-```python
-검색 결과 + 질문 비교 → Gemini 판정
-
-if 답변 가능:
-    답변 생성 + 출처 표시
-else:
-    "해당 질문에 대한 답변을 할 수 없습니다." 출력
-```
-
-#### 4. 제약사항
-- ❌ 새로운 metadata 필드 생성 금지
-- ❌ 새로운 DB 구조 생성 금지
-- ✅ 기존 코드베이스의 것만 사용
-
-### 구현 계획
-
-#### 파일 구조
-```
-utils/
-├── chat_manager.py          # 🆕 생성 필요
-│   ├─ IntentAnalyzer       # 의도 파악
-│   ├─ MetadataExtractor    # 메타데이터 필터 추출
-│   ├─ ChatRetriever        # 검색 로직 (Subtopic + Chunk)
-│   ├─ AnswerGenerator      # 답변 생성/판정
-│   └─ ChatBot              # 메인 클래스
-│
-app.py
-├─ /api/chat [POST]         # 🆕 엔드포인트 추가
-│
-templates/
-├── chatbot.html            # 🆕 독립 챗봇 페이지
-└── viewer.html             # 🔧 챗봇 탭 추가 (선택)
-```
-
-#### 처리 흐름
-```mermaid
-graph TB
-    A[User Query] --> B{의도 파악<br/>Gemini}
-
-    B -->|회의 무관| C[회의 관련 질문을<br/>해주세요]
-    B -->|회의 관련| D[메타데이터 추출]
-
-    D --> E{필터 생성}
-    E -->|날짜| F1[meeting_date]
-    E -->|제목| F2[title]
-    E -->|시간대| F3[start_time/end_time]
-    E -->|화자| F4[speaker_count]
-
-    F1 --> G[검색 실행]
-    F2 --> G
-    F3 --> G
-    F4 --> G
-
-    G --> H[Subtopic 검색]
-    G --> I[Chunk 검색]
-
-    H --> J[결과 병합]
-    I --> J
-
-    J --> K{답변 가능 판정}
-
-    K -->|가능| L[답변 생성<br/>+ 출처]
-    K -->|불가능| M[해당 질문에 대한<br/>답변을 할 수 없습니다]
-```
-
-#### 핵심 클래스 설계
-
-**1. IntentAnalyzer**
-```python
-class IntentAnalyzer:
-    def analyze(self, query: str) -> dict:
-        """
-        Gemini 2.5 Flash로 질문 의도 분석
-
-        Returns:
-        {
-            "is_meeting_related": bool,
-            "intent_type": str,
-            "filters": dict,
-            "optimized_query": str,
-            "confidence": float
-        }
-        """
-```
-
-**2. MetadataExtractor**
-```python
-class MetadataExtractor:
-    def extract_filters(self, analysis: dict, available_meetings: list) -> dict:
-        """
-        현재 DB의 메타데이터로 ChromaDB where 필터 생성
-
-        사용 가능한 metadata:
-        - meeting_id
-        - title
-        - meeting_date
-        - audio_file
-        - chunk_index (chunk만)
-        - start_time (chunk만)
-        - end_time (chunk만)
-        - speaker_count (chunk만)
-        """
-```
-
-**3. ChatRetriever**
-```python
-class ChatRetriever:
-    def retrieve(self, query: str, filters: dict, k: int = 5) -> list:
-        """
-        Two-stage retrieval:
-        1. Subtopic에서 개요 검색
-        2. Chunk에서 상세 검색
-        3. 결과 병합 및 rerank
-        """
-```
-
-**4. AnswerGenerator**
-```python
-class AnswerGenerator:
-    def judge_and_generate(self, query: str, retrieved_docs: list) -> dict:
-        """
-        Gemini로 답변 가능 여부 판정 및 생성
-
-        Returns:
-        {
-            "can_answer": bool,
-            "confidence": float,
-            "answer": str,
-            "sources": list
-        }
-        """
-```
-
-**5. ChatBot (메인 클래스)**
-```python
-class ChatBot:
-    def process_query(self, query: str, meeting_id: str = None) -> dict:
-        """
-        전체 파이프라인 실행
-
-        1. 의도 파악
-        2. 필터 생성
-        3. 검색
-        4. 답변 생성
-        """
-```
-
-#### API 엔드포인트
-
-**POST /api/chat**
-```python
-Request:
-{
-    "query": "프로젝트 일정은 언제로 결정됐어?",
-    "meeting_id": "abc-123" (선택, 특정 회의 질의)
-}
-
-Response (성공):
-{
-    "success": true,
-    "answer": "프로젝트 일정은 2025년 3월 15일로 결정되었습니다.",
-    "confidence": 0.92,
-    "sources": [
-        {
-            "meeting_id": "abc-123",
-            "title": "프로젝트 킥오프 회의",
-            "chunk_index": 5,
-            "timestamp": 120
-        }
-    ]
-}
-
-Response (실패 - 회의 무관):
-{
-    "success": false,
-    "message": "회의에 관련된 질문을 해주세요."
-}
-
-Response (실패 - 답변 불가):
-{
-    "success": false,
-    "message": "해당 질문에 대한 답변을 할 수 없습니다."
-}
-```
-
-### UI 옵션
-
-#### Option 1: 독립 챗봇 페이지
-- 경로: `/chatbot`
-- 전체 회의 대상 검색
-- 회의 선택 드롭다운
-
-#### Option 2: Viewer에 챗봇 탭 추가
-- 현재 보고 있는 회의에 대해서만 질문
-- 탭: 스크립트 | 문단 요약 | 회의록 | 챗봇
-
-#### 추천: Option 2 + Option 1 병행
-- Viewer: 특정 회의 QnA
-- 독립 페이지: 전체 회의 통합 검색
-
-### 추가 기능 제안
-
-#### 1. 출처 링크
-```python
-# 답변에 타임스탬프 링크 포함
-sources = [
-    {
-        "title": "프로젝트 킥오프 회의",
-        "timestamp": 120,
-        "link": "/view/{meeting_id}?t=120"  # 해당 시점으로 점프
-    }
-]
-```
-
-#### 2. 추천 질문
-```python
-# 회의 내용 기반 자동 생성
-suggested_questions = [
-    "이 회의의 주요 결정사항은?",
-    "다음 액션 아이템은?",
-    "참석자는 누구였어?"
-]
-```
-
-#### 3. 대화 히스토리 (선택)
-```python
-# 세션 기반 맥락 유지
-chat_history = [
-    {"role": "user", "content": "예산은 얼마야?"},
-    {"role": "assistant", "content": "500만원입니다."},
-    {"role": "user", "content": "그건 언제 결정됐어?"}  # 맥락 활용
-]
-```
-
-### 구현 우선순위
-
-| 우선순위 | 작업 항목 | 예상 시간 | 파일 |
-|---------|----------|----------|------|
-| **P0** | IntentAnalyzer 구현 | 2시간 | utils/chat_manager.py |
-| **P0** | MetadataExtractor 구현 | 1시간 | utils/chat_manager.py |
-| **P0** | ChatRetriever 구현 | 2시간 | utils/chat_manager.py |
-| **P0** | AnswerGenerator 구현 | 2시간 | utils/chat_manager.py |
-| **P0** | ChatBot 메인 클래스 | 1시간 | utils/chat_manager.py |
-| **P0** | /api/chat 엔드포인트 | 1시간 | app.py |
-| **P1** | Viewer에 챗봇 탭 추가 | 2시간 | templates/viewer.html, static/js/viewer.js |
-| **P1** | 독립 챗봇 페이지 | 2시간 | templates/chatbot.html |
-| **P2** | 출처 링크 기능 | 1시간 | utils/chat_manager.py |
-| **P2** | 추천 질문 생성 | 2시간 | utils/chat_manager.py |
-| **P3** | 대화 히스토리 | 3시간 | utils/chat_manager.py, app.py |
+**업로드 프로그레스바**:
+- 업로드 진행 상황 시각적 표시
+- 위치: `templates/index.html:38-52`, `static/js/script.js`
 
 ---
 
@@ -630,32 +314,44 @@ GOOGLE_API_KEY=...
 - `POST /api/generate_minutes/<meeting_id>` - 회의록 생성
 - `GET /api/get_minutes/<meeting_id>` - 회의록 조회
 
-### 검색
-- `POST /api/search` - Vector DB 검색
+### 챗봇 (NEW: 2025-11-04)
+- `POST /api/chat` - 챗봇 질의응답
+  ```json
+  Request:
+  {
+    "query": "프로젝트 일정은 언제야?",
+    "meeting_id": "abc-123"  // optional
+  }
 
-### 삭제 (2025-11-03 추가)
+  Response:
+  {
+    "success": true,
+    "answer": "답변 내용...",
+    "sources": [
+      {
+        "type": "chunk",
+        "meeting_id": "...",
+        "title": "...",
+        "start_time": 120,
+        "end_time": 180
+      }
+    ]
+  }
+  ```
+
+### 삭제
 - `POST /api/delete_meeting/<meeting_id>` - 회의 데이터 전체 삭제
+  - SQLite DB (meeting_dialogues, meeting_minutes)
+  - Vector DB (meeting_chunk, meeting_subtopic)
+  - 오디오 파일 (uploads 폴더)
+  - 터미널에 상세 검증 로그 출력
+
+### 검색
+- `POST /api/search` - Vector DB 검색 (4가지 retriever 지원)
 
 ### 기타
 - `GET /notes` - 모든 노트 목록
 - `GET /retriever` - 검색 테스트 페이지
-
----
-
-## 🐛 알려진 이슈 및 제약사항
-
-### 1. ChromaDB 메타데이터 필터링 제한
-- 부분 문자열 매칭 불가 (정확한 일치만 가능)
-- 범위 필터 제한적 (`$gte`, `$lte` 등 일부만 지원)
-- **해결 방법**: 검색 후 Python에서 후처리 필터링
-
-### 2. Gemini API Rate Limit
-- 분당 요청 수 제한 있음
-- **해결 방법**: 에러 핸들링 및 재시도 로직 필요
-
-### 3. 대용량 오디오 파일 처리
-- Whisper API 타임아웃 가능성
-- **해결 방법**: 청크 단위 분할 처리 고려
 
 ---
 
@@ -689,51 +385,193 @@ python app.py
 
 ---
 
-## 📚 참고 문서
+## 📊 현재 시스템 완성도
 
-- **FLOWCHART.md**: 시스템 아키텍처 상세 문서
-- **utils/vector_db_manager.py**:
-  - `_create_smart_chunks()`: Smart chunking 알고리즘 (lines 174-252)
-  - `_clean_text_with_gemini()`: Gemini 텍스트 정제 (lines 79-125)
-  - `search()`: 검색 함수 (lines 312-407)
-- **utils/db_manager.py**:
-  - `delete_meeting_by_id()`: 회의 삭제 (lines 200-230)
-- **app.py**:
-  - `/api/delete_meeting`: 삭제 API (lines 335-394)
+| 기능 | 상태 | 비고 |
+|------|------|------|
+| STT & 화자 분리 | ✅ 완료 | Whisper API |
+| Smart Chunking | ✅ 완료 | 화자/시간 기반 |
+| 문단 요약 | ✅ 완료 | Gemini API |
+| 회의록 생성 | ✅ 완료 | RAG 기반 |
+| 검색 시스템 | ✅ 완료 | 4가지 retriever |
+| AI 챗봇 | ✅ 완료 | Self-query retriever |
+| 개별 삭제 | ✅ 완료 | × 버튼 |
+| 일괄 삭제 | ✅ 완료 | 체크박스 + 순차 삭제 |
+| 삭제 검증 로그 | ✅ 완료 | 터미널 상세 로그 |
+| 프로그레스바 | ✅ 완료 | 업로드 진행 상황 |
+| 자동 요약 | ✅ 완료 | 페이지 로드 시 자동 |
+
+**전체 완성도: 100%** - 기본 기능 모두 구현 완료
 
 ---
 
-## 💡 다음 세션 작업 시작 가이드
+## 💡 향후 개선 제안
 
-### 챗봇 구현을 시작하려면:
+### 1. 일괄 삭제 UX 개선
+- **현재**: 순차 삭제 중 콘솔에만 로그 출력
+- **개선안**: 프로그레스 모달 추가
+  ```
+  [삭제 진행 중]
+  ▓▓▓▓▓▓░░░░ 60% (3/5 완료)
 
-1. **utils/chat_manager.py 생성**
-   ```bash
-   touch utils/chat_manager.py
-   ```
+  ✓ 회의 A 삭제 완료
+  ✓ 회의 B 삭제 완료
+  ⏳ 회의 C 삭제 중...
+  ```
+- **파일**: `templates/notes.html:306-352`
+- **예상 작업 시간**: 1시간
 
-2. **IntentAnalyzer 클래스부터 구현**
-   - Gemini 2.5 Flash로 질문 분석
-   - JSON 구조화된 출력
+### 2. 챗봇 추천 질문 기능
+- **현재**: 사용자가 직접 질문 입력
+- **개선안**: 회의 내용 기반 추천 질문 3개 자동 생성
+  ```
+  💬 추천 질문:
+  - 이 회의의 주요 결정사항은?
+  - 다음 액션 아이템은?
+  - 참석자는 누구였나요?
+  ```
+- **파일**: `utils/chat_manager.py` (새 메서드 추가)
+- **예상 작업 시간**: 2시간
 
-3. **테스트 쿼리 준비**
-   ```python
-   test_queries = [
-       "프로젝트 일정은 언제야?",           # DATE_RANGE
-       "어제 회의 내용 요약해줘",           # DATE_RANGE
-       "오늘 날씨 어때?",                  # NOT_MEETING_RELATED
-       "킥오프 회의에서 누가 발표했어?",   # SPECIFIC_MEETING
-   ]
-   ```
+### 3. 챗봇 출처 링크 기능
+- **현재**: 출처 정보만 표시
+- **개선안**: 클릭 시 해당 타임스탬프로 이동
+  ```json
+  {
+    "sources": [
+      {
+        "title": "프로젝트 킥오프",
+        "timestamp": 120,
+        "link": "/view/{meeting_id}?t=120"  // 120초 시점으로 이동
+      }
+    ]
+  }
+  ```
+- **파일**: `utils/chat_manager.py`, `static/js/script.js`
+- **예상 작업 시간**: 2시간
 
-4. **점진적 구현 순서**
-   - IntentAnalyzer → MetadataExtractor → ChatRetriever → AnswerGenerator → ChatBot 통합
+### 4. 회의록 템플릿 커스터마이징
+- **현재**: 고정된 회의록 템플릿
+- **개선안**: 사용자가 회의록 템플릿을 선택/편집
+  ```
+  템플릿 종류:
+  - 표준 회의록
+  - 간단 요약
+  - 액션 아이템 중심
+  - 의사결정 중심
+  ```
+- **파일**: `utils/stt.py` (generate_minutes), DB 스키마 수정
+- **예상 작업 시간**: 4시간
 
-### 질문이 필요한 사항:
-- [ ] UI 위치: Viewer 탭 vs 독립 페이지 vs 둘 다?
-- [ ] 검색 범위: 특정 회의만 vs 전체 회의?
-- [ ] 대화 히스토리: 필요 여부?
-- [ ] 출처 링크: 타임스탬프 점프 기능 필요 여부?
+### 5. 오디오 파일 분할 업로드
+- **현재**: 전체 파일을 한 번에 Whisper API로 전송
+- **문제**: 대용량 파일 타임아웃 가능
+- **개선안**: 10분 단위로 분할 → 병렬 처리 → 결과 병합
+- **파일**: `utils/stt.py`
+- **예상 작업 시간**: 3시간
+
+### 6. 다국어 지원
+- **현재**: 한국어만 지원
+- **개선안**: Whisper API의 자동 언어 감지 + 다국어 UI
+- **파일**: `utils/stt.py`, 모든 템플릿 파일
+- **예상 작업 시간**: 6시간
+
+### 7. 사용자 인증 시스템
+- **현재**: 인증 없음 (단일 사용자)
+- **개선안**: Flask-Login으로 다중 사용자 지원
+- **파일**: `app.py` (새 라우트 추가), DB 스키마 수정
+- **예상 작업 시간**: 8시간
+
+---
+
+## 🐛 알려진 이슈 및 제약사항
+
+### 1. ChromaDB 메타데이터 필터링 제한
+- **문제**: 부분 문자열 매칭 불가 (정확한 일치만 가능)
+- **해결 방법**: 검색 후 Python에서 후처리 필터링
+
+### 2. Gemini API Rate Limit
+- **문제**: 분당 요청 수 제한 있음
+- **해결 방법**: 에러 핸들링 및 재시도 로직 필요
+
+### 3. 대용량 오디오 파일 처리
+- **문제**: Whisper API 타임아웃 가능성
+- **해결 방법**: 향후 개선 제안 #5 참조
+
+---
+
+## 📚 참고 문서 및 중요 코드 위치
+
+### 시스템 아키텍처
+- **FLOWCHART.md**: 전체 시스템 플로우차트
+
+### 핵심 로직 위치
+- **Smart Chunking**: `utils/vector_db_manager.py:174-252` (`_create_smart_chunks()`)
+- **Gemini 텍스트 정제**: `utils/vector_db_manager.py:79-125` (`_clean_text_with_gemini()`)
+- **검색 로직**: `utils/vector_db_manager.py:312-407` (`search()`)
+- **챗봇 로직**: `utils/chat_manager.py:192-259` (`process_query()`)
+- **삭제 로직**: `utils/vector_db_manager.py:612-779` (`_delete_all_meeting_data()`)
+- **삭제 검증**: `utils/db_manager.py:201-281` (`delete_meeting_by_id()`)
+
+### UI 구성
+- **전역 레이아웃**: `templates/layout.html` (챗봇 포함)
+- **업로드 페이지**: `templates/index.html` (프로그레스바 포함)
+- **노트 목록**: `templates/notes.html` (일괄 삭제 포함)
+- **회의록 뷰어**: `templates/viewer.html`
+
+### JavaScript
+- **전역 스크립트**: `static/js/script.js` (챗봇 로직 포함)
+- **뷰어 스크립트**: `static/js/viewer.js`
+
+---
+
+## 🔄 최근 Git 커밋 이력
+
+```
+a95e63b - 회의록 자동 요약 기능 추가 및 챗봇 UI 오류 수정 (68분 전)
+9397db4 - 챗봇기능 구현(질의응답) (3시간 전)
+cb2e17a - 오류 처리 및 프로그레스바 기능 추가 (5시간 전)
+5c2c197 - requirements.txt추가 (5시간 전)
+637a268 - 챗봇UI구현 (9시간 전)
+745e0eb - vectorDB삭제기능구현 (9시간 전)
+dc496e0 - 삭제기능 수정 (10시간 전)
+2b633d7 - 삭제기능 추가 (23시간 전)
+```
+
+---
+
+## 💬 다음 세션 작업 시작 가이드
+
+### 바로 시작할 수 있는 작업들:
+
+#### 1️⃣ 일괄 삭제 프로그레스 모달 추가 (난이도: ⭐)
+```bash
+# 수정 파일
+templates/notes.html  # 모달 UI 추가
+static/js/notes.js    # 진행 상황 업데이트 로직
+```
+
+#### 2️⃣ 챗봇 추천 질문 기능 (난이도: ⭐⭐)
+```bash
+# 수정 파일
+utils/chat_manager.py      # generate_suggested_questions() 메서드 추가
+static/js/script.js        # 추천 질문 UI 추가
+```
+
+#### 3️⃣ 챗봇 출처 링크 기능 (난이도: ⭐⭐)
+```bash
+# 수정 파일
+utils/chat_manager.py      # 출처에 link 필드 추가
+static/js/script.js        # 링크 클릭 이벤트
+templates/viewer.html      # 타임스탬프 점프 로직
+```
+
+### 테스트 체크리스트:
+- [ ] 오디오 업로드 → STT → 회의록 생성 전 과정
+- [ ] 챗봇 질의응답 (다양한 질문 시도)
+- [ ] 개별 노트 삭제 → 터미널 로그 확인
+- [ ] 일괄 노트 삭제 → 터미널 로그 확인
+- [ ] 검색 기능 (4가지 retriever 테스트)
 
 ---
 
@@ -741,9 +579,10 @@ python app.py
 
 - 구현 중 막히는 부분이 있으면 FLOWCHART.md와 이 문서를 참조
 - 기존 코드 패턴을 최대한 유지하며 확장
+- 삭제 검증 로그 형식을 다른 작업에도 적용 가능
 
 ---
 
 **작성자**: Claude Code
-**마지막 업데이트**: 2025-11-03
-**다음 작업**: 챗봇 시스템 구현 (utils/chat_manager.py)
+**마지막 업데이트**: 2025-11-04 (AI 챗봇 완료, 일괄 삭제 기능 추가, 삭제 검증 로그 추가)
+**다음 작업 우선순위**: 1️⃣ 일괄 삭제 프로그레스 모달 → 2️⃣ 챗봇 추천 질문 → 3️⃣ 챗봇 출처 링크

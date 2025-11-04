@@ -65,13 +65,15 @@ body {
     border-radius: 50%;
     background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
     border: none;
-    cursor: pointer;
+    cursor: move; /* 드래그 가능 커서 */
     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
     display: flex;
     align-items: center;
     justify-content: center;
     z-index: 999;
-    transition: all 0.3s ease;
+    transition: box-shadow 0.3s ease, transform 0.3s ease, left 0.3s ease, right 0.3s ease;
+    user-select: none; /* 드래그 중 텍스트 선택 방지 */
+    -webkit-user-drag: none; /* 이미지 드래그 방지 */
 }
 
 .chatbot-toggle-btn:hover {
@@ -79,8 +81,16 @@ body {
     box-shadow: 0 6px 16px rgba(0, 0, 0, 0.2);
 }
 
+.chatbot-toggle-btn.dragging {
+    cursor: grabbing;
+    transform: scale(1.15);
+    box-shadow: 0 8px 20px rgba(0, 0, 0, 0.3);
+    transition: box-shadow 0.2s ease, transform 0.2s ease; /* 드래그 중에는 위치 transition만 제거 */
+}
+
 .chatbot-toggle-btn .chatbot-icon {
     font-size: 2rem;
+    pointer-events: none; /* 아이콘 자체는 클릭 이벤트 무시 */
 }
 
 .chatbot-toggle-btn.hidden {
@@ -551,4 +561,97 @@ body {
     text-align: center;
     padding: 3rem;
     color: #e74c3c;
+}
+
+/* --- Progress Modal --- */
+.progress-modal {
+    display: none;
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(0, 0, 0, 0.7);
+    z-index: 10000;
+    align-items: center;
+    justify-content: center;
+}
+
+.progress-modal.active {
+    display: flex;
+}
+
+.progress-modal-content {
+    background-color: white;
+    border-radius: 12px;
+    padding: 3rem;
+    width: 90%;
+    max-width: 500px;
+    text-align: center;
+    box-shadow: 0 10px 40px rgba(0, 0, 0, 0.3);
+}
+
+.progress-icon {
+    font-size: 4rem;
+    margin-bottom: 1rem;
+    animation: pulse 1.5s ease-in-out infinite;
+}
+
+@keyframes pulse {
+    0%, 100% {
+        transform: scale(1);
+    }
+    50% {
+        transform: scale(1.1);
+    }
+}
+
+.progress-modal-content h2 {
+    margin: 0 0 0.5rem 0;
+    color: var(--nav-bg);
+    font-size: 1.8rem;
+}
+
+#progress-status {
+    color: #666;
+    margin-bottom: 2rem;
+    font-size: 1rem;
+}
+
+.progress-bar-container {
+    width: 100%;
+    height: 40px;
+    background-color: #e0e0e0;
+    border-radius: 20px;
+    overflow: hidden;
+    position: relative;
+    margin-bottom: 1rem;
+}
+
+.progress-bar {
+    height: 100%;
+    background: linear-gradient(90deg, #667eea 0%, #764ba2 100%);
+    width: 0%;
+    transition: width 0.3s ease;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    position: relative;
+}
+
+.progress-text {
+    color: white;
+    font-weight: bold;
+    font-size: 1rem;
+    position: absolute;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 1;
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
+}
+
+.progress-tip {
+    color: #999;
+    font-size: 0.9rem;
+    margin-top: 1rem;
 }

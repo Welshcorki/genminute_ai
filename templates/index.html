@@ -35,5 +35,20 @@
             </div>
         </div>
     </form>
+
+    <!-- 프로그레스바 모달 -->
+    <div id="progress-modal" class="progress-modal">
+        <div class="progress-modal-content">
+            <div class="progress-icon">🎤</div>
+            <h2>음성 인식 중...</h2>
+            <p id="progress-status">파일을 업로드하고 있습니다</p>
+            <div class="progress-bar-container">
+                <div class="progress-bar" id="progress-bar">
+                    <span class="progress-text" id="progress-text">0%</span>
+                </div>
+            </div>
+            <p class="progress-tip">평균 처리 시간: 2-3분</p>
+        </div>
+    </div>
 </main>
 {% endblock %}

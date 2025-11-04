@@ -68,7 +68,7 @@ class VectorDBManager:
                 AttributeInfo(name="meeting_date", description="The date of the meeting in ISO format (YYYY-MM-DD)", type="string"),
                 AttributeInfo(name="audio_file", description="The name of the audio file for the meeting", type="string"),
                 AttributeInfo(name="main_topic", description="The main topic of the summarized sub-chunk", type="string"),
-                AttributeInfo(name="summaery_index", description="The index of the summary sub-chunk", type="integer"),
+                AttributeInfo(name="summary_index", description="The index of the summary sub-chunk", type="integer"),
             ],
         }
 

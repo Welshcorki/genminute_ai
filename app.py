@@ -45,18 +45,26 @@ def index():
 
 @app.route("/upload", methods=["POST"])
 def upload_and_process():
+    is_ajax = request.headers.get('X-Requested-With') == 'XMLHttpRequest' or request.accept_mimetypes.accept_json
+
     # 제목 검증
     title = request.form.get('title', '').strip()
     is_valid, error_message = validate_title(title)
     if not is_valid:
+        if is_ajax:
+            return jsonify({"success": False, "error": error_message}), 400
         return render_template("index.html", error=error_message)
 
     # 오디오 파일 검증
     if 'audio_file' not in request.files:
+        if is_ajax:
+            return jsonify({"success": False, "error": "오디오 파일이 없습니다."}), 400
         return render_template("index.html", error="오디오 파일이 없습니다.")
 
     file = request.files['audio_file']
     if file.filename == '' or not allowed_file(file.filename):
+        if is_ajax:
+            return jsonify({"success": False, "error": "파일이 없거나 허용되지 않는 형식입니다."}), 400
         return render_template("index.html", error="파일이 없거나 허용되지 않는 형식입니다.")
 
     # 회의 일시 처리 (입력이 없으면 현재 시간 자동 설정)
@@ -71,6 +79,8 @@ def upload_and_process():
         segments = stt_manager.transcribe_audio(audio_path)
 
         if not segments:
+            if is_ajax:
+                return jsonify({"success": False, "error": "음성 인식에 실패했습니다. API 키 등을 확인해주세요."}), 500
             return render_template("index.html", error="음성 인식에 실패했습니다. API 키 등을 확인해주세요.")
 
         # 1. SQLite DB에 개별 대화 저장 (meeting_date 전달)
@@ -95,10 +105,25 @@ def upload_and_process():
             # 벡터 DB 저장에 실패해도 주요 기능은 계속 동작하도록 일단 넘어감
 
         # 3. 결과를 보여주는 뷰어 페이지로 리디렉션
-        return redirect(url_for('view_meeting', meeting_id=meeting_id))
+        # AJAX 요청인 경우 JSON 응답
+        if request.headers.get('X-Requested-With') == 'XMLHttpRequest' or request.accept_mimetypes.accept_json:
+            return jsonify({
+                "success": True,
+                "meeting_id": meeting_id,
+                "redirect_url": url_for('view_meeting', meeting_id=meeting_id)
+            })
+        else:
+            return redirect(url_for('view_meeting', meeting_id=meeting_id))
 
     except Exception as e:
-        return render_template("index.html", error=f"서버 처리 중 오류가 발생했습니다: {e}")
+        # AJAX 요청인 경우 JSON 에러 응답
+        if request.headers.get('X-Requested-With') == 'XMLHttpRequest' or request.accept_mimetypes.accept_json:
+            return jsonify({
+                "success": False,
+                "error": f"서버 처리 중 오류가 발생했습니다: {e}"
+            }), 500
+        else:
+            return render_template("index.html", error=f"서버 처리 중 오류가 발생했습니다: {e}")
 
 @app.route("/notes")
 def list_notes():

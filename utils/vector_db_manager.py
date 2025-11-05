@@ -636,7 +636,7 @@ class VectorDBManager:
         print(f"   • SQLite DB - meeting_minutes 테이블 (WHERE meeting_id = '{meeting_id}')")
         print(f"   • Vector DB - meeting_chunk 컬렉션 (WHERE meeting_id = '{meeting_id}')")
         print(f"   • Vector DB - meeting_subtopic 컬렉션 (WHERE meeting_id = '{meeting_id}')")
-        print(f"   • 오디오 파일 (uploads 폴더)")
+        print(f"   • 미디어 파일 (오디오/비디오, uploads 폴더)")
         print("=" * 70)
 
         # 1. meeting_id로 오디오 파일명 조회
@@ -645,7 +645,7 @@ class VectorDBManager:
         if not audio_file:
             raise ValueError(f"meeting_id '{meeting_id}'에 해당하는 회의를 찾을 수 없습니다.")
 
-        print(f"📄 오디오 파일명: {audio_file}")
+        print(f"📄 미디어 파일명: {audio_file}")
         print("=" * 70)
 
         # 2. SQLite DB 삭제
@@ -741,33 +741,33 @@ class VectorDBManager:
             import traceback
             traceback.print_exc()
 
-        # 5. 오디오 파일 삭제
-        print(f"\n📊 [오디오 파일 삭제 검증 시작] meeting_id = {meeting_id}")
+        # 5. 미디어 파일 삭제 (오디오 또는 비디오)
+        print(f"\n📊 [미디어 파일 삭제 검증 시작] meeting_id = {meeting_id}")
         print("=" * 70)
 
         audio_path = os.path.join(self.upload_folder, audio_file)
         audio_deleted = False
 
         if os.path.exists(audio_path):
-            print(f"[삭제 전] 오디오 파일 존재: {audio_file}")
+            print(f"[삭제 전] 미디어 파일 존재: {audio_file}")
             print(f"           경로: {audio_path}")
             print("-" * 70)
 
             os.remove(audio_path)
-            print(f"[삭제 수행] 오디오 파일 삭제 시도: {audio_file}")
+            print(f"[삭제 수행] 미디어 파일 삭제 시도: {audio_file}")
 
             print("-" * 70)
 
             if not os.path.exists(audio_path):
-                print(f"[삭제 후] 오디오 파일 없음")
-                print(f"✅ 오디오 파일 삭제 검증 성공: 파일이 삭제되었습니다.")
+                print(f"[삭제 후] 미디어 파일 없음")
+                print(f"✅ 미디어 파일 삭제 검증 성공: 파일이 삭제되었습니다.")
                 audio_deleted = True
             else:
-                print(f"[삭제 후] 오디오 파일 여전히 존재")
-                print(f"⚠️ 오디오 파일 삭제 검증 실패: 파일이 남아있습니다.")
+                print(f"[삭제 후] 미디어 파일 여전히 존재")
+                print(f"⚠️ 미디어 파일 삭제 검증 실패: 파일이 남아있습니다.")
         else:
-            print(f"[삭제 전] 오디오 파일 없음: {audio_file}")
-            print(f"ℹ️ 오디오 파일이 존재하지 않습니다.")
+            print(f"[삭제 전] 미디어 파일 없음: {audio_file}")
+            print(f"ℹ️ 미디어 파일이 존재하지 않습니다.")
 
         print("=" * 70)
 
@@ -779,7 +779,7 @@ class VectorDBManager:
         print(f"✓ SQLite meeting_minutes: {deleted_sqlite['minutes']}개 삭제")
         print(f"✓ Vector DB meeting_chunk: {deleted_chunks_count}개 삭제")
         print(f"✓ Vector DB meeting_subtopic: {deleted_subtopic_count}개 삭제")
-        print(f"✓ 오디오 파일: {'삭제됨' if audio_deleted else '없음/실패'}")
+        print(f"✓ 미디어 파일 (오디오/비디오): {'삭제됨' if audio_deleted else '없음/실패'}")
         print("=" * 70 + "\n")
 
         return {

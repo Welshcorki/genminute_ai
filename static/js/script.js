@@ -607,7 +607,7 @@ document.addEventListener('DOMContentLoaded', () => {
         // 파일 처리 및 유효성 검사 함수
         function handleFile(file) {
             if (!file) return;
-            const allowedExtensions = ['.wav', '.mp3', '.m4a', '.flac'];
+            const allowedExtensions = ['.wav', '.mp3', '.m4a', '.flac', '.mp4'];
             const fileName = file.name;
             const fileExtension = fileName.substring(fileName.lastIndexOf('.')).toLowerCase();
 

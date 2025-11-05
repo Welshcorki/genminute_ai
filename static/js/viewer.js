@@ -1,6 +1,7 @@
 
 document.addEventListener('DOMContentLoaded', () => {
     const audioPlayer = document.getElementById('audio-player');
+    const videoPlayer = document.getElementById('video-player');
     const transcriptContainer = document.getElementById('transcript-container');
     const summaryContainer = document.getElementById('summary-container');
     const minutesContainer = document.getElementById('minutes-container');
@@ -10,6 +11,7 @@ document.addEventListener('DOMContentLoaded', () => {
     let currentSegmentIndex = -1;
     let summaryGenerated = false; // 요약 생성 여부 추적
     let minutesGenerated = false; // 회의록 생성 여부 추적
+    let currentPlayer = null; // 현재 사용 중인 플레이어 (비디오 또는 오디오)
 
     // 탭 전환 기능
     const tabButtons = document.querySelectorAll('.tab-button');
@@ -52,7 +54,26 @@ document.addEventListener('DOMContentLoaded', () => {
             // 데이터로 뷰어 설정
             segments = data.transcript;
             meetingTitle.textContent = data.title;
-            audioPlayer.src = data.audio_url;
+
+            // 파일 확장자 확인하여 비디오/오디오 플레이어 선택
+            const audioUrl = data.audio_url;
+            const fileExtension = audioUrl.split('.').pop().toLowerCase();
+
+            if (fileExtension === 'mp4') {
+                // 비디오 파일인 경우 비디오 플레이어 사용
+                videoPlayer.src = audioUrl;
+                videoPlayer.style.display = 'block';
+                audioPlayer.style.display = 'none';
+                currentPlayer = videoPlayer;
+                console.log('🎬 비디오 플레이어 활성화');
+            } else {
+                // 오디오 파일인 경우 오디오 플레이어 사용
+                audioPlayer.src = audioUrl;
+                audioPlayer.style.display = 'block';
+                videoPlayer.style.display = 'none';
+                currentPlayer = audioPlayer;
+                console.log('🎵 오디오 플레이어 활성화');
+            }
 
             // 회의 날짜 표시
             displayMeetingDate(data.meeting_date);
@@ -138,36 +159,44 @@ document.addEventListener('DOMContentLoaded', () => {
 
             // 클릭 시 해당 시간으로 이동 및 재생
             segDiv.addEventListener('click', () => {
-                audioPlayer.currentTime = segment.start_time;
-                audioPlayer.play();
+                if (currentPlayer) {
+                    currentPlayer.currentTime = segment.start_time;
+                    currentPlayer.play();
+                }
             });
 
             transcriptContainer.appendChild(segDiv);
         });
     }
 
-    // 오디오 재생에 맞춰 하이라이트
-    audioPlayer.addEventListener('timeupdate', () => {
-        const currentTime = audioPlayer.currentTime;
-        let newSegmentIndex = -1;
+    // 재생 시간에 맞춰 하이라이트 (오디오 & 비디오 공통)
+    function setupPlayerTimeUpdate(player) {
+        player.addEventListener('timeupdate', () => {
+            const currentTime = player.currentTime;
+            let newSegmentIndex = -1;
 
-        for (let i = 0; i < segments.length; i++) {
-            const segment = segments[i];
-            const nextSegment = segments[i + 1];
-            const startTime = segment.start_time;
-            const endTime = nextSegment ? nextSegment.start_time : audioPlayer.duration;
+            for (let i = 0; i < segments.length; i++) {
+                const segment = segments[i];
+                const nextSegment = segments[i + 1];
+                const startTime = segment.start_time;
+                const endTime = nextSegment ? nextSegment.start_time : player.duration;
 
-            if (currentTime >= startTime && currentTime < endTime) {
-                newSegmentIndex = i;
-                break;
+                if (currentTime >= startTime && currentTime < endTime) {
+                    newSegmentIndex = i;
+                    break;
+                }
             }
-        }
 
-        if (newSegmentIndex !== currentSegmentIndex) {
-            currentSegmentIndex = newSegmentIndex;
-            highlightSegment(currentSegmentIndex);
-        }
-    });
+            if (newSegmentIndex !== currentSegmentIndex) {
+                currentSegmentIndex = newSegmentIndex;
+                highlightSegment(currentSegmentIndex);
+            }
+        });
+    }
+
+    // 두 플레이어 모두에 이벤트 리스너 설정
+    setupPlayerTimeUpdate(audioPlayer);
+    setupPlayerTimeUpdate(videoPlayer);
 
     // 세그먼트 하이라이트 함수
     function highlightSegment(index) {
@@ -310,8 +339,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
         // 참석자 아이콘들 생성
         participantsList.innerHTML = participants.map((speaker, index) => {
-            // 배경색을 speaker별로 다르게 설정 (최대 5개 색상 순환)
-            const colors = ['#4A90E2', '#50C878', '#F39C12', '#9B59B6', '#E74C3C'];
+            // 배경색을 speaker별로 다르게 설정 (최대 8개 색상 순환)
+            const colors = ['#4A90E2', '#50C878', '#F39C12', '#9B59B6', '#E74C3C', '#1ABC9C', '#E91E63', '#FFC107'];
             const color = colors[index % colors.length];
 
             return `

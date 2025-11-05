@@ -14,12 +14,12 @@
     <form class="meeting-form" id="upload-form" method="POST" action="{{ url_for('upload_and_process') }}" enctype="multipart/form-data" novalidate>
         <div class="form-group">
             <div class="drop-zone" id="drop-zone">
-                <input type="file" id="audio-file-input" name="audio_file" accept=".wav,.mp3,.m4a,.flac" style="display: none;" required>
+                <input type="file" id="audio-file-input" name="audio_file" accept=".wav,.mp3,.m4a,.flac,.mp4" style="display: none;" required>
                 <div class="drop-zone-icon">&#128229;</div>
                 <p>음성 파일을 여기로 끌어놓으시면 업로드가 시작됩니다</p>
                 <button type="button" class="btn-primary" id="upload-button">파일 선택</button>
                 <p id="file-name-display" class="file-name-display"></p>
-                <p class="file-types-small">(파일형식: .wav, .mp3, .m4a, .flac)</p>
+                <p class="file-types-small">(파일형식: .wav, .mp3, .m4a, .flac, .mp4)</p>
             </div>
             <button type="submit" id="submit-button" class="btn-primary" style="display: none; margin-top: 1.5rem; width: 100%;">노트 생성</button>
         </div>

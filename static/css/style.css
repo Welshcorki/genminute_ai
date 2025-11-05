@@ -339,8 +339,9 @@ body {
 }
 .viewer-header { display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border-color); padding-bottom: 1rem; margin-bottom: 2rem; }
 .viewer-header h1 { margin: 0; font-size: 2rem; }
-.player-container { margin-bottom: 2rem; }
+.player-container { margin-bottom: 2rem; display: flex; justify-content: center; }
 #audio-player { width: 100%; }
+#video-player { width: 50%; border-radius: 8px; box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1); }
 .transcript-container { border: 1px solid var(--border-color); border-radius: 5px; padding: 1rem; height: calc(100vh - 250px); /* Adjust height based on layout */ overflow-y: auto; }
 .segment-block { padding: 1rem; border-bottom: 1px solid var(--border-color); cursor: pointer; transition: background-color 0.2s; }
 .segment-block:last-child { border-bottom: none; }

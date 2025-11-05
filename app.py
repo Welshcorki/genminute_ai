@@ -2,6 +2,7 @@ from flask import Flask, render_template, request, jsonify, redirect, url_for, s
 import os
 import json
 import datetime as dt
+import subprocess
 from werkzeug.utils import secure_filename
 from google import genai
 from google.genai import types
@@ -23,7 +24,7 @@ basedir = os.path.abspath(os.path.dirname(__file__))
 
 UPLOAD_FOLDER = os.path.join(basedir, "uploads")
 DB_PATH = os.path.join(basedir, "database", "minute_ai.db")
-ALLOWED_EXTENSIONS = {"wav", "mp3", "m4a", "flac"}
+ALLOWED_EXTENSIONS = {"wav", "mp3", "m4a", "flac", "mp4"}
 
 app.config["UPLOAD_FOLDER"] = UPLOAD_FOLDER
 os.makedirs(app.config["UPLOAD_FOLDER"], exist_ok=True)
@@ -41,6 +42,52 @@ chat_manager = ChatManager(vdb_manager)
 # --- 유틸리티 함수 ---
 def allowed_file(filename):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
+
+def convert_video_to_audio(video_path, audio_path):
+    """
+    비디오 파일(MP4)을 오디오 파일(WAV)로 변환합니다.
+
+    Args:
+        video_path: 입력 비디오 파일 경로
+        audio_path: 출력 오디오 파일 경로
+
+    Returns:
+        bool: 변환 성공 여부
+    """
+    try:
+        # ffmpeg 명령어로 비디오를 WAV로 변환
+        # -y: 기존 파일 덮어쓰기
+        # -i: 입력 파일
+        # -vn: 비디오 스트림 제거 (오디오만 추출)
+        # -acodec pcm_s16le: WAV 포맷 (16-bit PCM)
+        # -ar 16000: 샘플링 레이트 16kHz (Whisper 권장)
+        # -ac 1: 모노 채널
+        command = [
+            'ffmpeg',
+            '-y',
+            '-i', video_path,
+            '-vn',
+            '-acodec', 'pcm_s16le',
+            '-ar', '16000',
+            '-ac', '1',
+            audio_path
+        ]
+
+        result = subprocess.run(command, capture_output=True, text=True, timeout=300)
+
+        if result.returncode == 0:
+            print(f"✅ 비디오 → 오디오 변환 성공: {audio_path}")
+            return True
+        else:
+            print(f"❌ 비디오 → 오디오 변환 실패: {result.stderr}")
+            return False
+
+    except subprocess.TimeoutExpired:
+        print(f"❌ 비디오 변환 타임아웃 (5분 초과)")
+        return False
+    except Exception as e:
+        print(f"❌ 비디오 변환 중 오류 발생: {e}")
+        return False
 
 
 # --- Flask 라우트 ---
@@ -181,21 +228,58 @@ def upload_and_process():
 
     try:
         filename = secure_filename(file.filename)
-        audio_path = os.path.join(app.config["UPLOAD_FOLDER"], filename)
-        file.save(audio_path)
+        original_file_path = os.path.join(app.config["UPLOAD_FOLDER"], filename)
+        file.save(original_file_path)
 
         # 업로드 시점의 현재 시간을 회의 일시로 사용
         meeting_date = dt.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
-        segments = stt_manager.transcribe_audio(audio_path)
+        # 파일 확장자 확인
+        file_ext = filename.rsplit('.', 1)[1].lower()
+        is_video = (file_ext == 'mp4')
+
+        # 비디오 파일인 경우 오디오로 변환
+        temp_audio_path = None
+        if is_video:
+            print(f"🎬 비디오 파일 감지: {filename}")
+            # WAV 파일명 생성 (원본명_audio.wav)
+            base_name = filename.rsplit('.', 1)[0]
+            temp_audio_filename = f"{base_name}_audio.wav"
+            temp_audio_path = os.path.join(app.config["UPLOAD_FOLDER"], temp_audio_filename)
+
+            # 비디오 → 오디오 변환
+            if not convert_video_to_audio(original_file_path, temp_audio_path):
+                if is_ajax:
+                    return jsonify({"success": False, "error": "비디오를 오디오로 변환하는 데 실패했습니다."}), 500
+                return render_template("index.html", error="비디오를 오디오로 변환하는 데 실패했습니다.")
+
+            # STT는 변환된 오디오 파일로 처리
+            audio_path_for_stt = temp_audio_path
+        else:
+            # 오디오 파일은 그대로 사용
+            audio_path_for_stt = original_file_path
+
+        # STT 처리
+        segments = stt_manager.transcribe_audio(audio_path_for_stt)
 
         if not segments:
+            # STT 실패 시 임시 WAV 파일 삭제
+            if temp_audio_path and os.path.exists(temp_audio_path):
+                os.remove(temp_audio_path)
             if is_ajax:
                 return jsonify({"success": False, "error": "음성 인식에 실패했습니다. API 키 등을 확인해주세요."}), 500
             return render_template("index.html", error="음성 인식에 실패했습니다. API 키 등을 확인해주세요.")
 
-        # 1. SQLite DB에 개별 대화 저장 (meeting_date 전달)
+        # 1. SQLite DB에 개별 대화 저장 (원본 파일명 사용 - MP4 또는 오디오)
         meeting_id = db.save_stt_to_db(segments, filename, title, meeting_date)
+
+        # STT 처리 완료 후 임시 WAV 파일 삭제
+        if temp_audio_path and os.path.exists(temp_audio_path):
+            try:
+                os.remove(temp_audio_path)
+                print(f"🗑️  임시 오디오 파일 삭제 완료: {temp_audio_path}")
+            except Exception as e:
+                print(f"⚠️ 임시 오디오 파일 삭제 실패: {e}")
 
         # 2. Vector DB에 대화록을 의미적 청크로 저장
         try:

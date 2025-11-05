@@ -18,6 +18,9 @@
                 <div class="participants-list" id="participants-list">
                     <!-- 참석자 아이콘들이 동적으로 추가됨 -->
                 </div>
+                <button class="speaker-share-btn" id="speaker-share-btn" title="화자별 점유율 보기">
+                    📊
+                </button>
             </div>
         </div>
 
@@ -59,6 +62,19 @@
                 </div>
             </div>
         </div>
+
+        <!-- 화자별 점유율 모달 -->
+        <div id="speaker-share-modal" class="speaker-share-modal">
+            <div class="speaker-share-modal-content">
+                <div class="speaker-share-modal-header">
+                    <h3>화자별 대화 점유율</h3>
+                    <button class="modal-close-btn" id="close-share-modal">&times;</button>
+                </div>
+                <div class="speaker-share-modal-body">
+                    <canvas id="speakerShareChart"></canvas>
+                </div>
+            </div>
+        </div>
     </div>
 </main>
 {% endblock %}
@@ -68,5 +84,7 @@
     <script>
         const MEETING_ID = "{{ meeting_id }}";
     </script>
+    <!-- Chart.js CDN -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="{{ url_for('static', filename='js/viewer.js') }}"></script>
 {% endblock %}

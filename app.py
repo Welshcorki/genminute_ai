@@ -14,6 +14,7 @@ from utils.db_manager import DatabaseManager
 from utils.vector_db_manager import vdb_manager
 from utils.validation import validate_title, parse_meeting_date
 from utils.chat_manager import ChatManager
+from utils.analysis import calculate_speaker_share
 
 # --- 기본 설정 및 초기화 ---
 app = Flask(__name__)
@@ -382,6 +383,9 @@ def get_meeting_data(meeting_id):
         participants = list(set([t['speaker_label'] for t in transcript if t.get('speaker_label')]))
         participants.sort()  # 알파벳/숫자 순으로 정렬
 
+        # 화자별 점유율 계산
+        speaker_share_data = calculate_speaker_share(meeting_id)
+
         return jsonify({
             "success": True,
             "meeting_id": meeting_id,
@@ -389,7 +393,8 @@ def get_meeting_data(meeting_id):
             "meeting_date": meeting_date,
             "participants": participants,
             "audio_url": url_for('uploaded_file', filename=audio_file),
-            "transcript": transcript
+            "transcript": transcript,
+            "speaker_share": speaker_share_data
         })
     except Exception as e:
         return jsonify({"success": False, "error": f"DB 조회 오류: {e}"}), 500

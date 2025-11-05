@@ -12,6 +12,10 @@ document.addEventListener('DOMContentLoaded', () => {
     let summaryGenerated = false; // 요약 생성 여부 추적
     let minutesGenerated = false; // 회의록 생성 여부 추적
     let currentPlayer = null; // 현재 사용 중인 플레이어 (비디오 또는 오디오)
+    let participants = []; // 참석자 목록
+    const speakerColors = ['#4A90E2', '#50C878', '#F39C12', '#9B59B6', '#E74C3C', '#1ABC9C', '#E91E63', '#FFC107']; // 화자 색상 팔레트
+    let speakerShareData = null; // 화자별 점유율 데이터
+    let chartInstance = null; // Chart.js 인스턴스
 
     // 탭 전환 기능
     const tabButtons = document.querySelectorAll('.tab-button');
@@ -78,8 +82,12 @@ document.addEventListener('DOMContentLoaded', () => {
             // 회의 날짜 표시
             displayMeetingDate(data.meeting_date);
 
-            // 참석자 목록 표시
-            displayParticipants(data.participants);
+            // 참석자 목록 저장 및 표시
+            participants = data.participants || [];
+            displayParticipants(participants);
+
+            // 화자별 점유율 데이터 저장
+            speakerShareData = data.speaker_share;
 
             renderTranscript(segments);
 
@@ -149,9 +157,13 @@ document.addEventListener('DOMContentLoaded', () => {
 
             const time = new Date(segment.start_time * 1000).toISOString().substr(14, 5);
 
+            // speaker_label에 해당하는 색상 찾기
+            const speakerIndex = participants.indexOf(segment.speaker_label);
+            const speakerColor = speakerIndex >= 0 ? speakerColors[speakerIndex % speakerColors.length] : '#333';
+
             segDiv.innerHTML = `
                 <div class="segment-block-header">
-                    <span class="segment-speaker">Speaker ${segment.speaker_label}</span>
+                    <span class="segment-speaker" style="color: ${speakerColor}; font-weight: bold;">Speaker ${segment.speaker_label}</span>
                     <span class="segment-time">${time}</span>
                 </div>
                 <p class="segment-block-text">${segment.segment}</p>
@@ -339,9 +351,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
         // 참석자 아이콘들 생성
         participantsList.innerHTML = participants.map((speaker, index) => {
-            // 배경색을 speaker별로 다르게 설정 (최대 8개 색상 순환)
-            const colors = ['#4A90E2', '#50C878', '#F39C12', '#9B59B6', '#E74C3C', '#1ABC9C', '#E91E63', '#FFC107'];
-            const color = colors[index % colors.length];
+            // 배경색을 speaker별로 다르게 설정 (전역 색상 팔레트 사용)
+            const color = speakerColors[index % speakerColors.length];
 
             return `
                 <div class="participant-icon" style="background-color: ${color}" title="화자 ${speaker}">
@@ -372,5 +383,96 @@ document.addEventListener('DOMContentLoaded', () => {
             .replace(/^---$/gm, '<hr>');
 
         minutesContainer.innerHTML = `<div class="minutes-content">${htmlContent}</div>`;
+    }
+
+    // === 화자별 점유율 모달 관련 로직 ===
+    const speakerShareBtn = document.getElementById('speaker-share-btn');
+    const speakerShareModal = document.getElementById('speaker-share-modal');
+    const closeShareModal = document.getElementById('close-share-modal');
+
+    // 모달 열기
+    if (speakerShareBtn) {
+        speakerShareBtn.addEventListener('click', () => {
+            if (!speakerShareData || !speakerShareData.labels || speakerShareData.labels.length === 0) {
+                alert('점유율 데이터를 불러올 수 없습니다.');
+                return;
+            }
+            speakerShareModal.style.display = 'flex';
+            renderSpeakerChart(speakerShareData);
+        });
+    }
+
+    // 모달 닫기 (X 버튼)
+    if (closeShareModal) {
+        closeShareModal.addEventListener('click', () => {
+            speakerShareModal.style.display = 'none';
+        });
+    }
+
+    // 모달 닫기 (배경 클릭)
+    if (speakerShareModal) {
+        speakerShareModal.addEventListener('click', (e) => {
+            if (e.target === speakerShareModal) {
+                speakerShareModal.style.display = 'none';
+            }
+        });
+    }
+
+    // 화자별 점유율 차트 렌더링
+    function renderSpeakerChart(shareData) {
+        const ctx = document.getElementById('speakerShareChart');
+        if (!ctx) return;
+
+        // 기존 차트가 있으면 삭제
+        if (chartInstance) {
+            chartInstance.destroy();
+        }
+
+        // 화자별 색상 매칭 (participants 순서대로)
+        const chartColors = shareData.labels.map(label => {
+            const index = participants.indexOf(label);
+            return index >= 0 ? speakerColors[index % speakerColors.length] : '#999';
+        });
+
+        chartInstance = new Chart(ctx, {
+            type: 'bar',
+            data: {
+                labels: shareData.labels,
+                datasets: [{
+                    label: '대화 점유율 (%)',
+                    data: shareData.data,
+                    backgroundColor: chartColors.map(color => color + '40'), // 투명도 추가
+                    borderColor: chartColors,
+                    borderWidth: 2
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: true,
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        max: 100,
+                        ticks: {
+                            callback: function(value) {
+                                return value + '%';
+                            }
+                        }
+                    }
+                },
+                plugins: {
+                    legend: {
+                        display: false
+                    },
+                    tooltip: {
+                        callbacks: {
+                            label: function(context) {
+                                return context.parsed.y.toFixed(2) + '%';
+                            }
+                        }
+                    }
+                }
+            }
+        });
     }
 });

@@ -28,7 +28,11 @@ class STTManager:
     def transcribe_audio(self, audio_path):
         """Google Gemini STT API로 음성 인식"""
         try:
-            print(f"🎧 Gemini STT API로 음성 인식 중: {audio_path}")
+            import threading
+            import datetime
+            thread_id = threading.current_thread().name
+            timestamp = datetime.datetime.now().strftime("%H:%M:%S.%f")[:-3]
+            print(f"[{timestamp}][{thread_id}] 🎧 Gemini STT API로 음성 인식 중: {audio_path}")
             api_key = os.environ.get("GOOGLE_API_KEY")
             if api_key:
                 client = genai.Client(api_key=api_key)
@@ -90,6 +94,18 @@ class STTManager:
                 model="gemini-2.5-pro",
                 contents=[prompt, types.Part.from_bytes(data=file_bytes, mime_type=mime_type)],
             )
+
+            # response.text가 None인지 체크
+            if response.text is None:
+                print("⚠️ Gemini 응답이 비어있습니다. 응답 상태 확인:")
+                print(f"   - candidates: {response.candidates if hasattr(response, 'candidates') else 'N/A'}")
+                print(f"   - prompt_feedback: {response.prompt_feedback if hasattr(response, 'prompt_feedback') else 'N/A'}")
+
+                # 안전 필터링 체크
+                if hasattr(response, 'prompt_feedback') and response.prompt_feedback:
+                    print(f"⚠️ 프롬프트가 차단되었을 수 있습니다: {response.prompt_feedback}")
+
+                raise ValueError("Gemini API가 빈 응답을 반환했습니다. 안전 필터링 또는 API 오류일 수 있습니다.")
 
             cleaned_response = response.text.strip().replace("```json", "").replace("```", "").strip()
             result_list = json.loads(cleaned_response)
@@ -157,7 +173,11 @@ class STTManager:
         client = genai.Client(api_key=api_key)
         model = "gemini-2.5-pro"
 
-        print("🤖 Gemini를 통해 요약 생성 중...")
+        import threading
+        import datetime
+        thread_id = threading.current_thread().name
+        timestamp = datetime.datetime.now().strftime("%H:%M:%S.%f")[:-3]
+        print(f"[{timestamp}][{thread_id}] 🤖 Gemini를 통해 요약 생성 중...")
         try:
             response = client.models.generate_content(
                 model=model,

@@ -231,6 +231,42 @@ def get_user_meetings(user_id: int) -> List[Dict]:
         conn.close()
 
 
+def get_shared_meetings(user_id: int) -> List[Dict]:
+    """
+    사용자가 공유받은 회의 목록만 조회 (본인 노트 제외)
+
+    Args:
+        user_id: 사용자 ID
+
+    Returns:
+        공유받은 회의 목록 (meeting_id, title, meeting_date, audio_file)
+    """
+    conn = get_db_connection()
+    cursor = conn.cursor()
+
+    try:
+        # 공유받은 노트만 조회 (owner_id != user_id)
+        cursor.execute("""
+            SELECT DISTINCT
+                md.meeting_id,
+                md.title,
+                MAX(md.meeting_date) as meeting_date,
+                (SELECT audio_file FROM meeting_dialogues WHERE meeting_id = md.meeting_id LIMIT 1) as audio_file,
+                (SELECT owner_id FROM meeting_dialogues WHERE meeting_id = md.meeting_id LIMIT 1) as owner_id
+            FROM meeting_dialogues md
+            INNER JOIN meeting_shares s ON md.meeting_id = s.meeting_id
+            WHERE s.shared_with_user_id = ?
+            GROUP BY md.meeting_id
+            ORDER BY meeting_date DESC
+        """, (user_id,))
+
+        meetings = cursor.fetchall()
+        return [dict(meeting) for meeting in meetings]
+
+    finally:
+        conn.close()
+
+
 def share_meeting(meeting_id: str, owner_id: int, shared_with_email: str) -> Dict:
     """
     회의 노트 공유
@@ -258,7 +294,7 @@ def share_meeting(meeting_id: str, owner_id: int, shared_with_email: str) -> Dic
 
         # 3. 소유자 확인
         cursor.execute("""
-            SELECT owner_id FROM meeting_minutes WHERE meeting_id = ?
+            SELECT owner_id FROM meeting_dialogues WHERE meeting_id = ? LIMIT 1
         """, (meeting_id,))
         result = cursor.fetchone()
 

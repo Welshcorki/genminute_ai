@@ -18,6 +18,7 @@
                 <li class="nav-header">Meeting</li>
                 <li class="nav-item" data-page="index"><a href="{{ url_for('index') }}"><i class="fa-solid fa-plus"></i> 새노트 만들기</a></li>
                 <li class="nav-item" data-page="list_notes"><a href="{{ url_for('list_notes') }}"><i class="fa-solid fa-folder-open"></i> 노트 보기</a></li>
+                <li class="nav-item" data-page="shared_notes"><a href="{{ url_for('shared_notes') }}"><i class="fa-solid fa-share-nodes"></i> 공유 노트 보기</a></li>
                 {% if is_admin %}
                 <li class="nav-header">Debug</li>
                 <li class="nav-item" data-page="script_input_page"><a href="{{ url_for('script_input_page') }}"><i class="fa-solid fa-file-lines"></i> 스크립트입력</a></li>
@@ -70,6 +71,7 @@
             const pathMapping = {
                 '/': 'index',
                 '/notes': 'list_notes',
+                '/shared-notes': 'shared_notes',
                 '/script-input': 'script_input_page',
                 '/retriever': 'retriever_page',
                 '/summary_template': 'summary_template_page'

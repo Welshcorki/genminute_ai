@@ -16,7 +16,7 @@ from utils.validation import validate_title, parse_meeting_date
 from utils.chat_manager import ChatManager
 from utils.analysis import calculate_speaker_share
 from utils.firebase_auth import initialize_firebase, verify_id_token
-from utils.user_manager import get_or_create_user, get_user_by_id, can_access_meeting, get_user_meetings, share_meeting, get_shared_users, remove_share, get_user_accessible_meeting_ids, is_admin
+from utils.user_manager import get_or_create_user, get_user_by_id, can_access_meeting, get_user_meetings, get_shared_meetings, share_meeting, get_shared_users, remove_share, get_user_accessible_meeting_ids, is_admin
 from utils.decorators import login_required, admin_required
 
 # --- 환경 변수 로드 ---
@@ -532,6 +532,17 @@ def list_notes():
         return render_template("notes.html", meetings=meetings)
     except Exception as e:
         return render_template("index.html", error=f"노트 목록을 불러오는 중 오류가 발생했습니다: {e}")
+
+@app.route("/shared-notes")
+@login_required
+def shared_notes():
+    try:
+        # 공유받은 노트만 조회
+        user_id = session['user_id']
+        meetings = get_shared_meetings(user_id)
+        return render_template("shared-notes.html", meetings=meetings)
+    except Exception as e:
+        return render_template("index.html", error=f"공유 노트 목록을 불러오는 중 오류가 발생했습니다: {e}")
 
 @app.route("/view/<string:meeting_id>")
 @login_required

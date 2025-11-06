@@ -9,6 +9,7 @@
         <header class="viewer-header notes-header">
             <h1>모든 노트</h1>
             <div class="bulk-actions">
+                <button id="share-btn" class="btn-outline" disabled>공유</button>
                 <button id="select-all-btn" class="btn-outline" disabled>모두선택</button>
                 <button id="bulk-delete-btn" class="btn-outline" disabled>삭제</button>
             </div>
@@ -46,6 +47,19 @@
             <div class="modal-buttons">
                 <button id="confirm-delete-btn" class="btn-danger">예</button>
                 <button id="cancel-delete-btn" class="btn-secondary">아니오</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 공유 모달 -->
+    <div id="share-modal" class="modal" style="display: none;">
+        <div class="modal-content">
+            <h2>노트 공유</h2>
+            <p id="share-message">선택한 노트를 공유할 이메일을 입력하세요.</p>
+            <input type="email" id="share-email-input" class="share-email-input" placeholder="example@email.com">
+            <div class="modal-buttons">
+                <button id="confirm-share-btn" class="btn-primary">공유</button>
+                <button id="cancel-share-btn" class="btn-secondary">취소</button>
             </div>
         </div>
     </div>
@@ -176,6 +190,35 @@
 .btn-secondary:hover {
     background: #444;
 }
+
+.btn-primary {
+    background: #3498db;
+    color: white;
+    border: none;
+    padding: 0.5rem 1.5rem;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 1rem;
+}
+
+.btn-primary:hover {
+    background: #2980b9;
+}
+
+.share-email-input {
+    width: 100%;
+    padding: 0.75rem;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    font-size: 1rem;
+    margin: 1rem 0;
+    box-sizing: border-box;
+}
+
+.share-email-input:focus {
+    outline: none;
+    border-color: #3498db;
+}
 </style>
 {% endblock %}
 
@@ -185,6 +228,7 @@
 const checkboxes = document.querySelectorAll('.note-checkbox');
 const selectAllBtn = document.getElementById('select-all-btn');
 const bulkDeleteBtn = document.getElementById('bulk-delete-btn');
+const shareBtn = document.getElementById('share-btn');
 
 // 체크박스 상태 변경 시 버튼 활성화/비활성화
 function updateBulkActionButtons() {
@@ -195,9 +239,11 @@ function updateBulkActionButtons() {
     if (checkedBoxes.length > 0) {
         selectAllBtn.disabled = false;
         bulkDeleteBtn.disabled = false;
+        shareBtn.disabled = false;
     } else {
         selectAllBtn.disabled = true;
         bulkDeleteBtn.disabled = true;
+        shareBtn.disabled = true;
     }
 
     // "모두선택" 버튼 텍스트 변경
@@ -310,6 +356,116 @@ function closeModal() {
 document.getElementById('delete-modal').addEventListener('click', (e) => {
     if (e.target.id === 'delete-modal') {
         closeModal();
+    }
+});
+
+// === 공유 기능 ===
+// "공유" 버튼 클릭 (공유 모달 표시)
+if (shareBtn) {
+    shareBtn.addEventListener('click', () => {
+        const checkedBoxes = document.querySelectorAll('.note-checkbox:checked');
+
+        if (checkedBoxes.length === 0) return;
+
+        const shareModal = document.getElementById('share-modal');
+        const shareMessage = document.getElementById('share-message');
+        const shareEmailInput = document.getElementById('share-email-input');
+
+        shareMessage.textContent = `선택한 ${checkedBoxes.length}개의 노트를 공유할 이메일을 입력하세요.`;
+        shareEmailInput.value = ''; // 이메일 입력 필드 초기화
+        shareModal.style.display = 'flex';
+    });
+}
+
+// "공유" 확인 버튼 클릭 (공유 수행)
+document.getElementById('confirm-share-btn').addEventListener('click', async () => {
+    const checkedBoxes = document.querySelectorAll('.note-checkbox:checked');
+    const emailInput = document.getElementById('share-email-input');
+    const email = emailInput.value.trim();
+
+    if (checkedBoxes.length === 0) return;
+
+    // 이메일 유효성 검사
+    if (!email) {
+        alert('이메일을 입력해주세요.');
+        return;
+    }
+
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email)) {
+        alert('올바른 이메일 형식을 입력해주세요.');
+        return;
+    }
+
+    const totalCount = checkedBoxes.length;
+    let successCount = 0;
+    let failCount = 0;
+    const errors = [];
+
+    closeShareModal();
+
+    // 진행 상황 표시
+    console.log(`${totalCount}개의 노트를 ${email}에게 공유하는 중...`);
+
+    // 순차적으로 공유
+    for (let i = 0; i < checkedBoxes.length; i++) {
+        const checkbox = checkedBoxes[i];
+        const meetingId = checkbox.dataset.meetingId;
+        const title = checkbox.dataset.title;
+
+        try {
+            const response = await fetch(`/api/share/${meetingId}`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    email: email
+                })
+            });
+
+            const data = await response.json();
+
+            if (data.success) {
+                successCount++;
+                console.log(`✅ ${i + 1}/${totalCount} 공유 완료: ${title}`);
+            } else {
+                failCount++;
+                errors.push(`${title}: ${data.message || data.error || '알 수 없는 오류'}`);
+                console.error(`❌ ${i + 1}/${totalCount} 공유 실패: ${data.message || data.error}`);
+            }
+        } catch (error) {
+            failCount++;
+            errors.push(`${title}: 네트워크 오류`);
+            console.error(`❌ ${i + 1}/${totalCount} 요청 오류:`, error);
+        }
+    }
+
+    // 결과 알림
+    if (failCount === 0) {
+        alert(`${successCount}개의 노트가 ${email}에게 성공적으로 공유되었습니다.`);
+    } else {
+        let errorMessage = `${successCount}개 성공, ${failCount}개 실패\n\n실패 목록:\n`;
+        errorMessage += errors.join('\n');
+        alert(errorMessage);
+    }
+
+    // 페이지 새로고침
+    window.location.reload();
+});
+
+// "취소" 버튼 클릭
+document.getElementById('cancel-share-btn').addEventListener('click', closeShareModal);
+
+function closeShareModal() {
+    const shareModal = document.getElementById('share-modal');
+    shareModal.style.display = 'none';
+}
+
+// 공유 모달 배경 클릭 시 닫기
+document.getElementById('share-modal').addEventListener('click', (e) => {
+    if (e.target.id === 'share-modal') {
+        closeShareModal();
     }
 });
 </script>

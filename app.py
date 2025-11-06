@@ -1,4 +1,4 @@
-from flask import Flask, render_template, request, jsonify, redirect, url_for, send_from_directory
+from flask import Flask, render_template, request, jsonify, redirect, url_for, send_from_directory, session
 import os
 import json
 import datetime as dt
@@ -15,9 +15,36 @@ from utils.vector_db_manager import vdb_manager
 from utils.validation import validate_title, parse_meeting_date
 from utils.chat_manager import ChatManager
 from utils.analysis import calculate_speaker_share
+from utils.firebase_auth import initialize_firebase, verify_id_token
+from utils.user_manager import get_or_create_user, get_user_by_id, can_access_meeting, get_user_meetings, share_meeting, get_shared_users, remove_share, get_user_accessible_meeting_ids
+from utils.decorators import login_required, admin_required
+
+# --- 환경 변수 로드 ---
+# 명시적으로 .env 파일 경로 지정
+from pathlib import Path
+env_path = Path(__file__).parent / '.env'
+load_dotenv(dotenv_path=env_path)
+
+# 디버깅: 환경 변수 로드 확인
+print(f"📂 .env 파일 경로: {env_path}")
+print(f"📂 .env 파일 존재: {env_path.exists()}")
+print(f"🔑 FIREBASE_API_KEY 로드: {os.getenv('FIREBASE_API_KEY')[:20] if os.getenv('FIREBASE_API_KEY') else 'None'}...")
+print(f"🔑 FLASK_SECRET_KEY 로드: {'있음' if os.getenv('FLASK_SECRET_KEY') else 'None'}")
 
 # --- 기본 설정 및 초기화 ---
 app = Flask(__name__)
+
+# Flask SECRET_KEY 설정 (세션 암호화)
+app.config['SECRET_KEY'] = os.getenv('FLASK_SECRET_KEY')
+if not app.config['SECRET_KEY']:
+    raise ValueError("FLASK_SECRET_KEY가 .env 파일에 설정되지 않았습니다!")
+
+# Firebase 초기화
+try:
+    initialize_firebase()
+except Exception as e:
+    print(f"⚠️ Firebase 초기화 실패: {e}")
+    print("로그인 기능이 작동하지 않을 수 있습니다.")
 
 # 스크립트의 절대 경로를 기준으로 경로 설정
 basedir = os.path.abspath(os.path.dirname(__file__))
@@ -92,14 +119,121 @@ def convert_video_to_audio(video_path, audio_path):
 
 
 # --- Flask 라우트 ---
+
+# 로그인 페이지
+@app.route("/login")
+def login_page():
+    """로그인 페이지"""
+    # 이미 로그인된 경우 메인 페이지로 리다이렉트
+    if 'user_id' in session:
+        return redirect(url_for('index'))
+
+    # Firebase Config를 환경 변수에서 읽어서 템플릿에 전달
+    firebase_config = {
+        'apiKey': os.getenv('FIREBASE_API_KEY'),
+        'authDomain': os.getenv('FIREBASE_AUTH_DOMAIN'),
+        'projectId': os.getenv('FIREBASE_PROJECT_ID'),
+        'storageBucket': os.getenv('FIREBASE_STORAGE_BUCKET'),
+        'messagingSenderId': os.getenv('FIREBASE_MESSAGING_SENDER_ID'),
+        'appId': os.getenv('FIREBASE_APP_ID'),
+        'measurementId': os.getenv('FIREBASE_MEASUREMENT_ID')
+    }
+
+    # 디버깅: Firebase Config 확인
+    print("🔍 Firebase Config 확인:")
+    print(f"  API Key: {firebase_config['apiKey'][:20] if firebase_config['apiKey'] else 'None'}...")
+    print(f"  Auth Domain: {firebase_config['authDomain']}")
+    print(f"  Project ID: {firebase_config['projectId']}")
+
+    return render_template("login.html", firebase_config=firebase_config)
+
+# 로그인 API
+@app.route("/api/login", methods=["POST"])
+def login():
+    """Firebase ID 토큰을 받아 세션 생성"""
+    try:
+        data = request.get_json()
+        id_token = data.get('idToken')
+
+        if not id_token:
+            return jsonify({'success': False, 'error': 'ID 토큰이 필요합니다.'}), 400
+
+        # Firebase ID 토큰 검증
+        user_info = verify_id_token(id_token)
+
+        if not user_info:
+            return jsonify({'success': False, 'error': '유효하지 않은 토큰입니다.'}), 401
+
+        # DB에서 사용자 조회 또는 생성
+        user = get_or_create_user(
+            google_id=user_info['uid'],
+            email=user_info['email'],
+            name=user_info.get('name'),
+            profile_picture=user_info.get('picture')
+        )
+
+        # 세션 생성
+        session['user_id'] = user['id']
+        session['email'] = user['email']
+        session['name'] = user.get('name', '')
+        session['role'] = user['role']
+        session['profile_picture'] = user.get('profile_picture', '')
+
+        print(f"✅ 로그인 성공: {user['email']} (role: {user['role']})")
+
+        return jsonify({
+            'success': True,
+            'user': {
+                'id': user['id'],
+                'email': user['email'],
+                'name': user.get('name'),
+                'role': user['role']
+            }
+        })
+
+    except Exception as e:
+        print(f"❌ 로그인 실패: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'success': False, 'error': f'로그인 처리 중 오류가 발생했습니다: {str(e)}'}), 500
+
+# 로그아웃 API
+@app.route("/api/logout", methods=["POST"])
+def logout():
+    """세션 삭제"""
+    session.clear()
+    return jsonify({'success': True, 'message': '로그아웃되었습니다.'})
+
+# 현재 사용자 정보 API
+@app.route("/api/me", methods=["GET"])
+@login_required
+def get_current_user():
+    """현재 로그인한 사용자 정보 반환"""
+    return jsonify({
+        'success': True,
+        'user': {
+            'id': session['user_id'],
+            'email': session['email'],
+            'name': session.get('name', ''),
+            'role': session['role'],
+            'profile_picture': session.get('profile_picture', '')
+        }
+    })
+
+# 메인 페이지 (로그인 필요)
 @app.route("/")
+@login_required
 def index():
     return render_template("index.html")
 
 @app.route("/upload_script", methods=["POST"])
+@login_required
 def upload_script():
     """스크립트 텍스트를 입력받아 청킹, 문단요약, 회의록 생성까지 처리"""
     is_ajax = request.headers.get('X-Requested-With') == 'XMLHttpRequest' or request.accept_mimetypes.accept_json
+
+    # 현재 로그인한 사용자 ID
+    owner_id = session['user_id']
 
     # 제목 검증
     title = request.form.get('title', '').strip()
@@ -131,7 +265,7 @@ def upload_script():
 
         # 2. SQLite DB에 개별 대화 저장 (audio_file은 더미값 사용)
         dummy_filename = f"script_{title[:20]}_{meeting_date.replace(' ', '_').replace(':', '-')}.txt"
-        meeting_id = db.save_stt_to_db(segments, dummy_filename, title, meeting_date)
+        meeting_id = db.save_stt_to_db(segments, dummy_filename, title, meeting_date, owner_id)
 
         # 3. Vector DB에 대화록을 의미적 청크로 저장
         try:
@@ -204,8 +338,12 @@ def upload_script():
             return render_template("index.html", error=f"서버 처리 중 오류가 발생했습니다: {e}")
 
 @app.route("/upload", methods=["POST"])
+@login_required
 def upload_and_process():
     is_ajax = request.headers.get('X-Requested-With') == 'XMLHttpRequest' or request.accept_mimetypes.accept_json
+
+    # 현재 로그인한 사용자 ID
+    owner_id = session['user_id']
 
     # 제목 검증
     title = request.form.get('title', '').strip()
@@ -272,7 +410,7 @@ def upload_and_process():
             return render_template("index.html", error="음성 인식에 실패했습니다. API 키 등을 확인해주세요.")
 
         # 1. SQLite DB에 개별 대화 저장 (원본 파일명 사용 - MP4 또는 오디오)
-        meeting_id = db.save_stt_to_db(segments, filename, title, meeting_date)
+        meeting_id = db.save_stt_to_db(segments, filename, title, meeting_date, owner_id)
 
         # STT 처리 완료 후 임시 WAV 파일 삭제
         if temp_audio_path and os.path.exists(temp_audio_path):
@@ -355,20 +493,35 @@ def upload_and_process():
             return render_template("index.html", error=f"서버 처리 중 오류가 발생했습니다: {e}")
 
 @app.route("/notes")
+@login_required
 def list_notes():
     try:
-        meetings = db.get_all_meetings()
+        # 사용자별 노트 목록 조회 (본인 노트 + 공유받은 노트)
+        user_id = session['user_id']
+        meetings = get_user_meetings(user_id)
         return render_template("notes.html", meetings=meetings)
     except Exception as e:
         return render_template("index.html", error=f"노트 목록을 불러오는 중 오류가 발생했습니다: {e}")
 
 @app.route("/view/<string:meeting_id>")
+@login_required
 def view_meeting(meeting_id):
+    # 권한 체크
+    user_id = session['user_id']
+    if not can_access_meeting(user_id, meeting_id):
+        return "⛔ 접근 권한이 없습니다.", 403
+
     return render_template("viewer.html", meeting_id=meeting_id)
 
 @app.route("/api/meeting/<string:meeting_id>")
+@login_required
 def get_meeting_data(meeting_id):
     try:
+        # 권한 체크
+        user_id = session['user_id']
+        if not can_access_meeting(user_id, meeting_id):
+            return jsonify({"success": False, "error": "접근 권한이 없습니다."}), 403
+
         rows = db.get_meeting_by_id(meeting_id)
         if not rows:
             return jsonify({"success": False, "error": "해당 회의를 찾을 수 없습니다."}), 404
@@ -400,8 +553,13 @@ def get_meeting_data(meeting_id):
         return jsonify({"success": False, "error": f"DB 조회 오류: {e}"}), 500
 
 @app.route("/api/summarize/<string:meeting_id>", methods=["POST"])
+@login_required
 def summarize_meeting(meeting_id):
     try:
+        # 권한 체크
+        user_id = session['user_id']
+        if not can_access_meeting(user_id, meeting_id):
+            return jsonify({"success": False, "error": "접근 권한이 없습니다."}), 403
         # 1. meeting_id로 회의록 내용 조회
         rows = db.get_meeting_by_id(meeting_id)
         if not rows:
@@ -504,8 +662,9 @@ def summary_template_page():
     return render_template("summary_template.html")
 
 @app.route("/retriever")
+@admin_required
 def retriever_page():
-    """리트리버 테스트 페이지를 렌더링합니다."""
+    """리트리버 테스트 페이지를 렌더링합니다. (Admin 전용 디버그 메뉴)"""
     return render_template("retriever.html")
 
 @app.route("/script-input")
@@ -514,9 +673,14 @@ def script_input_page():
     return render_template("script_input.html")
 
 @app.route("/api/check_summary/<string:meeting_id>", methods=["GET"])
+@login_required
 def check_summary(meeting_id):
     """문단 요약 존재 여부 확인 API"""
     try:
+        # 권한 체크
+        user_id = session['user_id']
+        if not can_access_meeting(user_id, meeting_id):
+            return jsonify({"success": False, "error": "접근 권한이 없습니다."}), 403
         # Vector DB에서 문단 요약 조회
         summary_content = vdb_manager.get_summary_by_meeting_id(meeting_id)
 
@@ -539,9 +703,14 @@ def check_summary(meeting_id):
         return jsonify({"success": False, "error": f"요약 조회 중 오류 발생: {str(e)}"}), 500
 
 @app.route("/api/get_minutes/<string:meeting_id>", methods=["GET"])
+@login_required
 def get_minutes(meeting_id):
     """회의록 조회 API - SQLite DB에서 저장된 회의록을 조회합니다."""
     try:
+        # 권한 체크
+        user_id = session['user_id']
+        if not can_access_meeting(user_id, meeting_id):
+            return jsonify({"success": False, "error": "접근 권한이 없습니다."}), 403
         # DB에서 회의록 조회
         minutes_data = db.get_minutes_by_meeting_id(meeting_id)
 
@@ -566,9 +735,14 @@ def get_minutes(meeting_id):
         return jsonify({"success": False, "error": f"회의록 조회 중 오류 발생: {str(e)}"}), 500
 
 @app.route("/api/generate_minutes/<string:meeting_id>", methods=["POST"])
+@login_required
 def generate_minutes(meeting_id):
     """회의록 생성 API - 청킹된 문서를 기반으로 정식 회의록을 생성하고 DB에 저장합니다."""
     try:
+        # 권한 체크
+        user_id = session['user_id']
+        if not can_access_meeting(user_id, meeting_id):
+            return jsonify({"success": False, "error": "접근 권한이 없습니다."}), 403
         # 1. meeting_id로 회의록 내용 조회
         rows = db.get_meeting_by_id(meeting_id)
         if not rows:
@@ -609,6 +783,7 @@ def generate_minutes(meeting_id):
         return jsonify({"success": False, "error": f"회의록 생성 중 오류 발생: {str(e)}"}), 500
 
 @app.route("/api/delete_meeting/<string:meeting_id>", methods=["POST"])
+@login_required
 def delete_meeting(meeting_id):
     """
     회의와 관련된 모든 데이터를 삭제합니다.
@@ -617,6 +792,10 @@ def delete_meeting(meeting_id):
     - 오디오 파일
     """
     try:
+        # 권한 체크 (소유자 또는 admin만 삭제 가능)
+        user_id = session['user_id']
+        if not can_access_meeting(user_id, meeting_id):
+            return jsonify({"success": False, "error": "접근 권한이 없습니다."}), 403
         # VectorDBManager의 delete_from_collection(db_type="all")로 모든 데이터 삭제
         result = vdb_manager.delete_from_collection(db_type="all", meeting_id=meeting_id)
         return jsonify(result)
@@ -630,12 +809,18 @@ def delete_meeting(meeting_id):
         return jsonify({"success": False, "error": f"삭제 중 오류 발생: {str(e)}"}), 500
 
 @app.route("/api/chat", methods=["POST"])
+@login_required
 def chat():
     """
     챗봇 API 엔드포인트
     사용자 질문을 받아 회의록 기반으로 답변을 생성합니다.
+
+    보안:
+    - meeting_id가 있으면: 해당 노트만 검색 (권한 체크)
+    - meeting_id가 없으면: 사용자가 접근 가능한 모든 노트에서 검색
     """
     try:
+        user_id = session['user_id']
         # 요청 데이터 가져오기
         data = request.get_json()
 
@@ -648,8 +833,27 @@ def chat():
         if not query:
             return jsonify({"success": False, "error": "질문을 입력해주세요."}), 400
 
+        # meeting_id가 제공된 경우 권한 체크
+        if meeting_id:
+            if not can_access_meeting(user_id, meeting_id):
+                return jsonify({"success": False, "error": "접근 권한이 없습니다."}), 403
+            accessible_meeting_ids = None
+        else:
+            # meeting_id가 없으면 사용자가 접근 가능한 모든 노트 ID 조회
+            accessible_meeting_ids = get_user_accessible_meeting_ids(user_id)
+            if not accessible_meeting_ids:
+                return jsonify({
+                    "success": True,
+                    "answer": "접근 가능한 노트가 없습니다. 먼저 회의록을 업로드해주세요.",
+                    "sources": []
+                }), 200
+
         # ChatManager를 통해 질의 처리
-        result = chat_manager.process_query(query, meeting_id)
+        result = chat_manager.process_query(
+            query,
+            meeting_id=meeting_id,
+            accessible_meeting_ids=accessible_meeting_ids
+        )
 
         if result["success"]:
             return jsonify(result), 200
@@ -663,6 +867,74 @@ def chat():
             "success": False,
             "error": f"챗봇 처리 중 오류가 발생했습니다: {str(e)}"
         }), 500
+
+# 공유 기능 API
+@app.route("/api/share/<string:meeting_id>", methods=["POST"])
+@login_required
+def share_meeting_api(meeting_id):
+    """노트 공유 API"""
+    try:
+        user_id = session['user_id']
+
+        # 권한 체크 (소유자만 공유 가능)
+        if not can_access_meeting(user_id, meeting_id):
+            return jsonify({"success": False, "error": "접근 권한이 없습니다."}), 403
+
+        # 공유받을 사용자 이메일
+        data = request.get_json()
+        shared_with_email = data.get('email', '').strip()
+
+        if not shared_with_email:
+            return jsonify({"success": False, "error": "이메일을 입력해주세요."}), 400
+
+        # 공유 처리
+        result = share_meeting(meeting_id, user_id, shared_with_email)
+        return jsonify(result)
+
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return jsonify({"success": False, "error": f"공유 중 오류가 발생했습니다: {str(e)}"}), 500
+
+@app.route("/api/shared_users/<string:meeting_id>", methods=["GET"])
+@login_required
+def get_shared_users_api(meeting_id):
+    """노트를 공유받은 사용자 목록 조회"""
+    try:
+        user_id = session['user_id']
+
+        # 권한 체크
+        if not can_access_meeting(user_id, meeting_id):
+            return jsonify({"success": False, "error": "접근 권한이 없습니다."}), 403
+
+        # 공유받은 사용자 목록
+        shared_users = get_shared_users(meeting_id)
+        return jsonify({"success": True, "shared_users": shared_users})
+
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return jsonify({"success": False, "error": f"조회 중 오류가 발생했습니다: {str(e)}"}), 500
+
+@app.route("/api/unshare/<string:meeting_id>/<int:user_id>", methods=["POST"])
+@login_required
+def unshare_meeting_api(meeting_id, user_id):
+    """노트 공유 해제 API"""
+    try:
+        owner_id = session['user_id']
+
+        # 권한 체크 (소유자만 공유 해제 가능)
+        if not can_access_meeting(owner_id, meeting_id):
+            return jsonify({"success": False, "error": "접근 권한이 없습니다."}), 403
+
+        # 공유 해제
+        result = remove_share(meeting_id, owner_id, user_id)
+        return jsonify(result)
+
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return jsonify({"success": False, "error": f"공유 해제 중 오류가 발생했습니다: {str(e)}"}), 500
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5050, debug=True)

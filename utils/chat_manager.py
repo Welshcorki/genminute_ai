@@ -29,13 +29,14 @@ class ChatManager:
         self.gemini_client = genai.Client(api_key=api_key)
         self.model_name = "gemini-2.5-flash"
 
-    def search_documents(self, query: str, meeting_id: str = None) -> dict:
+    def search_documents(self, query: str, meeting_id: str = None, accessible_meeting_ids: list = None) -> dict:
         """
         meeting_chunks와 meeting_subtopic에서 각각 3개씩 검색
 
         Args:
             query (str): 사용자 질문
             meeting_id (str, optional): 특정 회의로 제한할 경우
+            accessible_meeting_ids (list, optional): 사용자가 접근 가능한 meeting_id 목록
 
         Returns:
             dict: {
@@ -45,10 +46,59 @@ class ChatManager:
             }
         """
         # 필터 조건 설정
-        filter_criteria = {"meeting_id": meeting_id} if meeting_id else None
+        filter_criteria = None
+
+        if meeting_id:
+            # 특정 노트로 제한
+            filter_criteria = {"meeting_id": meeting_id}
+        elif accessible_meeting_ids:
+            # 접근 가능한 노트들로 제한 (여러 노트에서 검색)
+            # Vector DB가 $in 연산자를 지원하지 않을 수 있으므로, 각 노트별로 검색 후 결합
+            print(f"🔍 {len(accessible_meeting_ids)}개 노트에서 검색 중...")
+            all_chunks = []
+            all_subtopics = []
+
+            for mid in accessible_meeting_ids:
+                try:
+                    # 각 노트에서 1개씩 검색
+                    chunk_result = self.vdb_manager.search(
+                        db_type="chunks",
+                        query=query,
+                        k=1,
+                        retriever_type="self_query",
+                        filter_criteria={"meeting_id": mid}
+                    )
+                    all_chunks.extend(chunk_result)
+
+                    subtopic_result = self.vdb_manager.search(
+                        db_type="subtopic",
+                        query=query,
+                        k=1,
+                        retriever_type="self_query",
+                        filter_criteria={"meeting_id": mid}
+                    )
+                    all_subtopics.extend(subtopic_result)
+                except Exception as e:
+                    # 특정 노트 검색 실패 시 계속 진행
+                    print(f"⚠️ 노트 {mid} 검색 실패: {e}")
+                    continue
+
+            # 상위 3개씩만 선택 (relevance score 기준)
+            # LangChain Document는 기본적으로 relevance score를 가지고 있지 않을 수 있으므로
+            # 검색된 순서대로 상위 3개만 선택
+            chunks_results = all_chunks[:3]
+            subtopic_results = all_subtopics[:3]
+
+            print(f"✅ 검색 완료: chunks={len(chunks_results)}개, subtopic={len(subtopic_results)}개")
+
+            return {
+                "chunks": chunks_results,
+                "subtopics": subtopic_results,
+                "total_count": len(chunks_results) + len(subtopic_results)
+            }
 
         try:
-            # meeting_chunks에서 3개 검색 (self_query 사용)
+            # 단일 노트 검색 (meeting_id가 지정된 경우)
             chunks_results = self.vdb_manager.search(
                 db_type="chunks",
                 query=query,
@@ -57,7 +107,6 @@ class ChatManager:
                 filter_criteria=filter_criteria
             )
 
-            # meeting_subtopic에서 3개 검색 (self_query 사용)
             subtopic_results = self.vdb_manager.search(
                 db_type="subtopic",
                 query=query,
@@ -189,13 +238,14 @@ class ChatManager:
                 "error": str(e)
             }
 
-    def process_query(self, query: str, meeting_id: str = None) -> dict:
+    def process_query(self, query: str, meeting_id: str = None, accessible_meeting_ids: list = None) -> dict:
         """
         사용자 질의를 처리하여 답변 반환
 
         Args:
             query (str): 사용자 질문
             meeting_id (str, optional): 특정 회의로 제한
+            accessible_meeting_ids (list, optional): 사용자가 접근 가능한 meeting_id 목록
 
         Returns:
             dict: {
@@ -208,7 +258,7 @@ class ChatManager:
         print(f"🤖 챗봇 질의 처리 시작: '{query}'")
 
         # 1. 관련 문서 검색
-        search_results = self.search_documents(query, meeting_id)
+        search_results = self.search_documents(query, meeting_id, accessible_meeting_ids)
 
         if search_results["total_count"] == 0:
             return {

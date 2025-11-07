@@ -45,12 +45,19 @@ class ChatManager:
                 "total_count": int
             }
         """
-        # 필터 조건 설정
-        filter_criteria = None
+        # title 키워드 필터링 비활성화
+        # 이유: Similarity search가 이미 의미론적으로 관련된 문서를 찾아주므로,
+        #       단순한 키워드 추출로 오히려 좋은 결과를 제거할 수 있음
+        title_keywords = []
+
+        # (참고) 필요시 특정 패턴만 추출하도록 개선 가능:
+        # - 고유명사 (예: "사자회담")
+        # - 따옴표로 묶인 단어
+        # - NLP 기반 주제어 추출
 
         if meeting_id:
-            # 특정 노트로 제한
-            filter_criteria = {"meeting_id": meeting_id}
+            # 특정 노트로 제한 (검색 후 필터링)
+            pass  # filter_criteria는 None으로 유지, 검색 후 meeting_id로 필터링
         elif accessible_meeting_ids:
             # 접근 가능한 노트들로 제한 (여러 노트에서 검색)
             # Vector DB가 $in 연산자를 지원하지 않을 수 있으므로, 각 노트별로 검색 후 결합
@@ -58,34 +65,58 @@ class ChatManager:
             all_chunks = []
             all_subtopics = []
 
-            for mid in accessible_meeting_ids:
-                try:
-                    # 각 노트에서 1개씩 검색
-                    chunk_result = self.vdb_manager.search(
-                        db_type="chunks",
-                        query=query,
-                        k=1,
-                        retriever_type="self_query",
-                        filter_criteria={"meeting_id": mid}
-                    )
-                    all_chunks.extend(chunk_result)
+            # Similarity search 사용
+            try:
+                chunk_result = self.vdb_manager.search(
+                    db_type="chunks",
+                    query=query,
+                    k=len(accessible_meeting_ids) * 10,  # 넉넉하게 검색
+                    retriever_type="similarity",
+                    filter_criteria=None
+                )
+                # 접근 가능한 meeting_id로 필터링
+                all_chunks = [doc for doc in chunk_result
+                             if doc.metadata.get('meeting_id') in accessible_meeting_ids]
 
-                    subtopic_result = self.vdb_manager.search(
-                        db_type="subtopic",
-                        query=query,
-                        k=1,
-                        retriever_type="self_query",
-                        filter_criteria={"meeting_id": mid}
-                    )
-                    all_subtopics.extend(subtopic_result)
-                except Exception as e:
-                    # 특정 노트 검색 실패 시 계속 진행
-                    print(f"⚠️ 노트 {mid} 검색 실패: {e}")
-                    continue
+                subtopic_result = self.vdb_manager.search(
+                    db_type="subtopic",
+                    query=query,
+                    k=len(accessible_meeting_ids) * 10,  # 넉넉하게 검색
+                    retriever_type="similarity",
+                    filter_criteria=None
+                )
+                # 접근 가능한 meeting_id로 필터링
+                all_subtopics = [doc for doc in subtopic_result
+                                if doc.metadata.get('meeting_id') in accessible_meeting_ids]
 
-            # 상위 3개씩만 선택 (relevance score 기준)
-            # LangChain Document는 기본적으로 relevance score를 가지고 있지 않을 수 있으므로
-            # 검색된 순서대로 상위 3개만 선택
+                # title 키워드로 부분 일치 필터링
+                if title_keywords:
+                    print(f"📌 title 필터링 적용: {title_keywords}")
+                    filtered_chunks = []
+                    for doc in all_chunks:
+                        doc_title = doc.metadata.get('title', '').lower()
+                        if any(keyword.lower() in doc_title for keyword in title_keywords):
+                            filtered_chunks.append(doc)
+
+                    filtered_subtopics = []
+                    for doc in all_subtopics:
+                        doc_title = doc.metadata.get('meeting_title', '').lower()
+                        if any(keyword.lower() in doc_title for keyword in title_keywords):
+                            filtered_subtopics.append(doc)
+
+                    print(f"   필터링 전: chunks={len(all_chunks)}, subtopic={len(all_subtopics)}")
+                    print(f"   필터링 후: chunks={len(filtered_chunks)}, subtopic={len(filtered_subtopics)}")
+
+                    all_chunks = filtered_chunks
+                    all_subtopics = filtered_subtopics
+
+            except Exception as e:
+                # 검색 실패 시 빈 결과 반환
+                print(f"⚠️ 검색 실패: {e}")
+                all_chunks = []
+                all_subtopics = []
+
+            # 상위 3개씩만 선택
             chunks_results = all_chunks[:3]
             subtopic_results = all_subtopics[:3]
 
@@ -98,22 +129,56 @@ class ChatManager:
             }
 
         try:
-            # 단일 노트 검색 (meeting_id가 지정된 경우)
+            # 단일 노트 검색 또는 전체 검색
+            # Similarity search 사용 (self-query는 정확한 일치만 지원하므로 부분 일치가 안됨)
             chunks_results = self.vdb_manager.search(
                 db_type="chunks",
                 query=query,
-                k=3,
-                retriever_type="self_query",
-                filter_criteria=filter_criteria
+                k=20 if meeting_id else 10,  # 넉넉하게 검색 후 필터링
+                retriever_type="similarity",
+                filter_criteria=None
             )
 
             subtopic_results = self.vdb_manager.search(
                 db_type="subtopic",
                 query=query,
-                k=3,
-                retriever_type="self_query",
-                filter_criteria=filter_criteria
+                k=20 if meeting_id else 10,  # 넉넉하게 검색 후 필터링
+                retriever_type="similarity",
+                filter_criteria=None
             )
+
+            # meeting_id가 지정된 경우, 해당 노트로 필터링
+            if meeting_id:
+                chunks_results = [doc for doc in chunks_results
+                                 if doc.metadata.get('meeting_id') == meeting_id]
+                subtopic_results = [doc for doc in subtopic_results
+                                   if doc.metadata.get('meeting_id') == meeting_id]
+
+            # title 키워드로 부분 일치 필터링
+            if title_keywords:
+                print(f"📌 title 필터링 적용: {title_keywords}")
+                filtered_chunks = []
+                for doc in chunks_results:
+                    doc_title = doc.metadata.get('title', '').lower()
+                    # 키워드 중 하나라도 title에 포함되면 선택
+                    if any(keyword.lower() in doc_title for keyword in title_keywords):
+                        filtered_chunks.append(doc)
+
+                filtered_subtopics = []
+                for doc in subtopic_results:
+                    doc_title = doc.metadata.get('meeting_title', '').lower()
+                    if any(keyword.lower() in doc_title for keyword in title_keywords):
+                        filtered_subtopics.append(doc)
+
+                print(f"   필터링 전: chunks={len(chunks_results)}, subtopic={len(subtopic_results)}")
+                print(f"   필터링 후: chunks={len(filtered_chunks)}, subtopic={len(filtered_subtopics)}")
+
+                chunks_results = filtered_chunks
+                subtopic_results = filtered_subtopics
+
+            # 상위 3개만 선택
+            chunks_results = chunks_results[:3]
+            subtopic_results = subtopic_results[:3]
 
             print(f"✅ 검색 완료: chunks={len(chunks_results)}개, subtopic={len(subtopic_results)}개")
 

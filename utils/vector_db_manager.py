@@ -50,20 +50,34 @@ class VectorDBManager:
         # Define metadata field information for SelfQueryRetriever
         self.metadata_field_infos = {
             "chunks": [
-                AttributeInfo(name="meeting_id", description="The unique identifier for the meeting", type="string"),
                 AttributeInfo(name="dialogue_id", description="The unique identifier for the dialogue within the meeting", type="string"),
                 AttributeInfo(name="chunk_index", description="The index of the chunk within the meeting", type="integer"),
-                AttributeInfo(name="title", description="The title of the meeting", type="string"),
-                AttributeInfo(name="meeting_date", description="The date of the meeting in ISO format (YYYY-MM-DD)", type="string"),
+                AttributeInfo(
+                    name="title",
+                    description="회의 제목 또는 노트 이름. 사용자 쿼리에서 회의/노트 이름이 언급되면 이 필드로 필터링. 부분 일치 검색 가능. 예: 쿼리에 '사자회담'이 있으면 title에 '사자회담'이 포함된 모든 문서",
+                    type="string"
+                ),
+                AttributeInfo(
+                    name="meeting_date",
+                    description="회의 시점을 나타내는 텍스트 필드 (예: '2025-11-07'). 문자열로 저장되며 정확한 일치 검색에 사용됩니다",
+                    type="string"
+                ),
                 AttributeInfo(name="audio_file", description="The name of the audio file for the meeting", type="string"),
                 AttributeInfo(name="start_time", description="The start time of the chunk in seconds", type="float"),
                 AttributeInfo(name="end_time", description="The end time of the chunk in seconds", type="float"),
                 AttributeInfo(name="speaker_count", description="The number of different speakers in the chunk", type="integer"),
             ],
             "subtopic": [
-                AttributeInfo(name="meeting_id", description="The unique identifier for the meeting", type="string"),
-                AttributeInfo(name="meeting_title", description="The title of the meeting", type="string"),
-                AttributeInfo(name="meeting_date", description="The date of the meeting in ISO format (YYYY-MM-DD)", type="string"),
+                AttributeInfo(
+                    name="meeting_title",
+                    description="회의 제목 또는 노트 이름. 사용자 쿼리에서 회의/노트 이름이 언급되면 이 필드로 필터링. 부분 일치 검색 가능. 예: 쿼리에 '사자회담'이 있으면 meeting_title에 '사자회담'이 포함된 모든 문서",
+                    type="string"
+                ),
+                AttributeInfo(
+                    name="meeting_date",
+                    description="회의 시점을 나타내는 텍스트 필드 (예: '2025-11-07'). 문자열로 저장되며 정확한 일치 검색에 사용됩니다",
+                    type="string"
+                ),
                 AttributeInfo(name="audio_file", description="The name of the audio file for the meeting", type="string"),
                 AttributeInfo(name="main_topic", description="The main topic of the summarized sub-chunk", type="string"),
                 AttributeInfo(name="summary_index", description="The index of the summary sub-chunk", type="integer"),
@@ -72,8 +86,8 @@ class VectorDBManager:
 
         # Define document content descriptions for SelfQueryRetriever
         self.document_content_descriptions = {
-            "chunks": "Semantically grouped chunks of meeting transcript dialogue with speaker labels and timestamps",
-            "subtopic": "Summarized sub-topic of a meeting transcript",
+            "chunks": "회의 대화 내용의 의미론적으로 그룹화된 청크 (화자 라벨 및 타임스탬프 포함)",
+            "subtopic": "회의록의 요약된 하위 주제",
         }
 
         print(f"✅ VectorDBManager for collections {list(self.COLLECTION_NAMES.values())} initialized.")
@@ -132,12 +146,14 @@ class VectorDBManager:
 
             for i, chunk_info in enumerate(chunks):
                 chunk_texts.append(chunk_info['text'])
+                # meeting_date를 문자열로 강제 변환 (datetime 객체일 경우 대비)
+                meeting_date_str = str(meeting_date) if meeting_date else ""
                 chunk_metadatas.append({
                     "meeting_id": meeting_id,
                     "dialogue_id": f"{meeting_id}_chunk_{i}",
                     "chunk_index": i,
                     "title": title,
-                    "meeting_date": meeting_date,
+                    "meeting_date": meeting_date_str,
                     "audio_file": audio_file,
                     "start_time": chunk_info['start_time'],
                     "end_time": chunk_info['end_time'],
@@ -191,12 +207,14 @@ class VectorDBManager:
 
             for i, chunk_text in enumerate(cleaned_chunks):
                 chunk_texts.append(chunk_text)
+                # meeting_date를 문자열로 강제 변환 (datetime 객체일 경우 대비)
+                meeting_date_str = str(meeting_date) if meeting_date else ""
                 chunk_metadatas.append({
                     "meeting_id": meeting_id,
                     "dialogue_id": f"{meeting_id}_chunk_{i}",
                     "chunk_index": i,
                     "title": title,
-                    "meeting_date": meeting_date,
+                    "meeting_date": meeting_date_str,
                     "audio_file": audio_file
                 })
                 chunk_ids.append(f"{meeting_id}_chunk_{i}")
@@ -318,15 +336,18 @@ class VectorDBManager:
             # '### '가 없는 경우를 대비하여, 첫 줄을 main_topic으로 추출
             lines = chunk.split('\n')
             main_topic = lines[0].replace('### ', '').strip()
-            
+
             # 실제 저장될 내용은 '### '를 포함한 전체 청크
             full_chunk_content = '### ' + chunk if not chunk.startswith('###') else chunk
+
+            # meeting_date를 문자열로 강제 변환 (datetime 객체일 경우 대비)
+            meeting_date_str = str(meeting_date) if meeting_date else ""
 
             chunk_texts.append(full_chunk_content)
             chunk_metadatas.append({
                 "meeting_id": meeting_id,
                 "meeting_title": title,
-                "meeting_date": meeting_date,
+                "meeting_date": meeting_date_str,
                 "audio_file": audio_file,
                 "main_topic": main_topic,
                 "summary_index": i
@@ -418,25 +439,45 @@ class VectorDBManager:
             metadata_info = self.metadata_field_infos[db_type]
             doc_description = self.document_content_descriptions[db_type]
 
-            retriever = SelfQueryRetriever.from_llm(
-                self.llm,
-                vdb,
-                doc_description,
-                metadata_info,
-                verbose=True,
-                base_filter=filter_criteria,
-                # [개선 아이디어] SelfQueryRetriever가 반환할 k의 개수를 설정할 수 있습니다.
-                # 다만, invoke 시점이 아닌 생성 시점에 search_kwargs를 넘겨야 할 수 있습니다. (LangChain 버전에 따라 다름)
-                # enable_limit=True를 사용하고 쿼리에 "top 3 results" 등을 포함시켜야 할 수도 있습니다.
-            )
-            results = retriever.invoke(query)
+            try:
+                retriever = SelfQueryRetriever.from_llm(
+                    self.llm,
+                    vdb,
+                    doc_description,
+                    metadata_info,
+                    verbose=True,
+                    base_filter=filter_criteria,
+                    # [개선 아이디어] SelfQueryRetriever가 반환할 k의 개수를 설정할 수 있습니다.
+                    # 다만, invoke 시점이 아닌 생성 시점에 search_kwargs를 넘겨야 할 수 있습니다. (LangChain 버전에 따라 다름)
+                    # enable_limit=True를 사용하고 쿼리에 "top 3 results" 등을 포함시켜야 할 수도 있습니다.
+                )
+                results = retriever.invoke(query)
 
-            # [수정됨] SelfQuery 이후에도 k개만 반환하도록 강제 (필요시)
-            # SelfQueryRetriever는 k를 LLM이 추론하게 하므로, k가 무시될 수 있습니다.
-            # 만약 결과가 너무 많다면, k만큼 잘라냅니다.
-            if len(results) > k:
-                 print(f"ℹ️ SelfQuery found {len(results)} results. Truncating to k={k}.")
-                 results = results[:k]
+                # [수정됨] SelfQuery 이후에도 k개만 반환하도록 강제 (필요시)
+                # SelfQueryRetriever는 k를 LLM이 추론하게 하므로, k가 무시될 수 있습니다.
+                # 만약 결과가 너무 많다면, k만큼 잘라냅니다.
+                if len(results) > k:
+                     print(f"ℹ️ SelfQuery found {len(results)} results. Truncating to k={k}.")
+                     results = results[:k]
+
+            except Exception as e:
+                # SelfQuery 실패 시 similarity search로 폴백
+                error_msg = str(e)
+                print(f"⚠️ SelfQuery 실패 (폴백: similarity search): {error_msg}")
+
+                # ChromaDB 호환되지 않는 필터 오류인 경우, similarity search로 대체
+                if "Expected where operand value" in error_msg or "type" in error_msg:
+                    print("   → ChromaDB 호환되지 않는 필터 형식 감지. similarity search로 전환합니다.")
+
+                search_kwargs = {'k': k}
+                if filter_criteria:
+                    search_kwargs['filter'] = filter_criteria
+
+                retriever = vdb.as_retriever(
+                    search_type="similarity",
+                    search_kwargs=search_kwargs
+                )
+                results = retriever.invoke(query)
 
         print(f"✅ Found {len(results)} documents from '{self.COLLECTION_NAMES[db_type]}' for query: '{query}'")
         return results

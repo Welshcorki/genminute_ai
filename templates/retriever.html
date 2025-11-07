@@ -24,10 +24,13 @@
         <div class="form-group">
             <label for="retriever-type-select">리트리버 타입</label>
             <select id="retriever-type-select" name="retriever_type" class="form-control">
-                <option value="similarity" selected>Similarity (유사도)</option>
+                <option value="similarity" selected>Similarity (유사도) - 권장</option>
                 <option value="mmr">MMR (최대 한계 관련성)</option>
-                <option value="self_query">Self-Query (자체 쿼리)</option>
+                <option value="self_query">Self-Query (실험적, 날짜 필터 제한)</option>
             </select>
+            <small style="color: #666; display: block; margin-top: 5px;">
+                ℹ️ Self-Query는 날짜 필터 사용 시 자동으로 Similarity로 전환됩니다.
+            </small>
         </div>
         <button type="submit" class="btn-primary">검색</button>
     </form>

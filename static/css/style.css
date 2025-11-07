@@ -403,7 +403,7 @@ body {
 .content-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 2rem; }
 .title-input { font-size: 1.8rem; font-weight: bold; border: none; outline: none; width: 100%; }
 .title-input::placeholder { color: var(--placeholder-text); }
-.btn-secondary { background-color: var(--secondary-color); border: 1px solid var(--border-color); border-radius: 5px; padding: 8px 16px; cursor: pointer; text-decoration: none; color: var(--text-color); }
+.btn-secondary { background-color: var(--secondary-color); border: 1px solid var(--border-color); border-radius: 5px; padding: 10px 20px; font-size: 1rem; cursor: pointer; text-decoration: none; color: var(--text-color); }
 .meeting-form .form-group { margin-bottom: 1.5rem; }
 .meeting-form label { display: block; font-weight: bold; margin-bottom: 0.5rem; }
 .meeting-form input[type="text"], .meeting-form textarea { width: 100%; padding: 10px; border: 1px solid var(--border-color); border-radius: 5px; font-size: 1rem; }

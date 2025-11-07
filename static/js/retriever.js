@@ -54,7 +54,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         const resultHeader = document.createElement('h3');
-        resultHeader.textContent = `검색 결과 (${results.length}개)`;
+        resultHeader.textContent = `✅ 검색 결과 (${results.length}개)`;
         resultsArea.appendChild(resultHeader);
 
         results.forEach(result => {

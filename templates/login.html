@@ -191,6 +191,10 @@
 
                 // Google 로그인 팝업
                 const provider = new GoogleAuthProvider();
+                // 항상 계정 선택 화면 표시 (다른 계정으로 로그인 가능)
+                provider.setCustomParameters({
+                    prompt: 'select_account'
+                });
                 const result = await signInWithPopup(auth, provider);
 
                 // ID 토큰 가져오기

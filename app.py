@@ -127,11 +127,17 @@ def inject_user_info():
         is_user_admin = is_admin(user_id)
         return {
             'current_user_id': user_id,
-            'is_admin': is_user_admin
+            'is_admin': is_user_admin,
+            'user_name': session.get('name', '사용자'),
+            'user_email': session.get('email', ''),
+            'user_picture': session.get('profile_picture', '')
         }
     return {
         'current_user_id': None,
-        'is_admin': False
+        'is_admin': False,
+        'user_name': None,
+        'user_email': None,
+        'user_picture': None
     }
 
 

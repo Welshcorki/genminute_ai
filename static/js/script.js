@@ -133,11 +133,11 @@ document.addEventListener('DOMContentLoaded', () => {
                 // 답변 표시
                 addChatMessage('assistant', data.answer);
 
-                // 출처 정보가 있으면 표시 (선택적)
-                if (data.sources && data.sources.length > 0) {
-                    const sourcesText = formatSources(data.sources);
-                    addChatMessage('assistant', sourcesText, true); // 작은 글씨로 표시
-                }
+                // 출처 정보 표시 제거 (필요시 아래 주석 해제)
+                // if (data.sources && data.sources.length > 0) {
+                //     const sourcesText = formatSources(data.sources);
+                //     addChatMessage('assistant', sourcesText, true); // 작은 글씨로 표시
+                // }
             } else {
                 addChatMessage('assistant', `오류: ${data.error || '알 수 없는 오류가 발생했습니다.'}`);
             }

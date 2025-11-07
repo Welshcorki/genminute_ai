@@ -25,7 +25,32 @@
                 <li class="nav-item" data-page="retriever_page"><a href="{{ url_for('retriever_page') }}"><i class="fa-solid fa-magnifying-glass"></i> 리트리버</a></li>
                 <li class="nav-item" data-page="summary_template_page"><a href="{{ url_for('summary_template_page') }}"><i class="fa-solid fa-list-check"></i> 요약/템플릿</a></li>
                 {% endif %}
+            </ul>
+
+            <!-- Spacer to push Account section to bottom -->
+            <div class="nav-spacer"></div>
+
+            <!-- Account Section (bottom) -->
+            <ul class="nav-menu nav-account">
                 <li class="nav-header">Account</li>
+
+                <!-- User Info Card -->
+                <li class="user-info-card">
+                    <div class="user-avatar">
+                        {% if user_picture %}
+                            <img src="{{ user_picture }}" alt="프로필">
+                        {% else %}
+                            <div class="user-avatar-placeholder">
+                                <i class="fa-solid fa-user"></i>
+                            </div>
+                        {% endif %}
+                    </div>
+                    <div class="user-details">
+                        <div class="user-name">{{ user_name or '사용자명' }}</div>
+                        <div class="user-email">{{ user_email or 'user@email.com' }}</div>
+                    </div>
+                </li>
+
                 <li class="nav-item"><a href="#" id="logout-btn"><i class="fa-solid fa-right-from-bracket"></i> 로그아웃</a></li>
             </ul>
         </nav>

@@ -1,4 +1,5 @@
 import os
+import re
 from google import genai
 from dotenv import load_dotenv
 
@@ -232,12 +233,17 @@ class ChatManager:
             context_parts.append("\n=== 회의 주제별 요약 ===")
             for i, doc in enumerate(search_results["subtopics"], 1):
                 metadata = doc.metadata
+                content = doc.page_content
+
+                # 첫 번째 ### 제목 라인 제거 (구버전 제목이 포함될 수 있음)
+                content = re.sub(r'^###\s+.+?\n', '', content, count=1)
+
                 context_parts.append(
                     f"\n[요약 {i}]\n"
                     f"회의: {metadata.get('meeting_title', 'N/A')}\n"
                     f"일시: {metadata.get('meeting_date', 'N/A')}\n"
                     f"주제: {metadata.get('main_topic', 'N/A')}\n"
-                    f"내용:\n{doc.page_content}\n"
+                    f"내용:\n{content}\n"
                 )
 
         if not context_parts:
@@ -269,6 +275,7 @@ class ChatManager:
 2. [검색된 회의록 내용]에 질문에 대한 정보가 전혀 없다면, "죄송합니다. 해당 내용을 회의록에서 찾을 수 없습니다."라고 명확하게 답변해야 합니다.
 3. 절대로 당신의 사전 지식이나 외부 정보를 사용해서 답변을 추측하거나 생성하지 마세요.
 4. 답변은 명확하고 간결하게 요약하여 제공하세요.
+5. **중요**: 회의 제목과 날짜는 **반드시** 메타데이터의 '회의:' 및 '일시:' 필드를 참조하세요. 내용(본문)에 나오는 제목이나 날짜는 구버전일 수 있으므로 무시하세요.
 
 ---
 

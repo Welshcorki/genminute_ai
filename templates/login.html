@@ -152,6 +152,11 @@
 
     <!-- Firebase SDK -->
     <script type="module">
+        // 로그인 페이지 진입 시 챗봇 데이터 초기화
+        sessionStorage.removeItem('chatbot_history');
+        sessionStorage.removeItem('chatbot_state');
+        console.log('✅ 로그인 페이지: 챗봇 데이터 초기화 완료');
+
         import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js';
         import { getAuth, signInWithPopup, GoogleAuthProvider } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js';
 

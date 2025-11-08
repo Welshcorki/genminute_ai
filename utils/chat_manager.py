@@ -14,12 +14,16 @@ class ChatManager:
     Gemini 2.5 Flash로 답변을 생성합니다.
     """
 
-    def __init__(self, vector_db_manager):
+    def __init__(self, vector_db_manager, retriever_type="similarity"):
         """
         Args:
             vector_db_manager (VectorDBManager): 벡터 DB 매니저 인스턴스
+            retriever_type (str, optional): 검색 리트리버 타입.
+                                            "similarity", "mmr", "self_query", "similarity_score_threshold" 중 선택.
+                                            Defaults to "similarity".
         """
         self.vdb_manager = vector_db_manager
+        self.retriever_type = retriever_type
 
         # Gemini API 클라이언트 초기화
         api_key = os.environ.get("GOOGLE_API_KEY")
@@ -28,6 +32,8 @@ class ChatManager:
 
         self.gemini_client = genai.Client(api_key=api_key)
         self.model_name = "gemini-2.5-flash"
+
+        print(f"✅ ChatManager 초기화 완료: retriever_type='{self.retriever_type}'")
 
     def search_documents(self, query: str, meeting_id: str = None, accessible_meeting_ids: list = None) -> dict:
         """
@@ -65,13 +71,13 @@ class ChatManager:
             all_chunks = []
             all_subtopics = []
 
-            # Similarity search 사용
+            # 설정된 retriever_type 사용
             try:
                 chunk_result = self.vdb_manager.search(
                     db_type="chunks",
                     query=query,
                     k=len(accessible_meeting_ids) * 10,  # 넉넉하게 검색
-                    retriever_type="similarity",
+                    retriever_type=self.retriever_type,
                     filter_criteria=None
                 )
                 # 접근 가능한 meeting_id로 필터링
@@ -82,7 +88,7 @@ class ChatManager:
                     db_type="subtopic",
                     query=query,
                     k=len(accessible_meeting_ids) * 10,  # 넉넉하게 검색
-                    retriever_type="similarity",
+                    retriever_type=self.retriever_type,
                     filter_criteria=None
                 )
                 # 접근 가능한 meeting_id로 필터링
@@ -130,12 +136,12 @@ class ChatManager:
 
         try:
             # 단일 노트 검색 또는 전체 검색
-            # Similarity search 사용 (self-query는 정확한 일치만 지원하므로 부분 일치가 안됨)
+            # 설정된 retriever_type 사용
             chunks_results = self.vdb_manager.search(
                 db_type="chunks",
                 query=query,
                 k=20 if meeting_id else 10,  # 넉넉하게 검색 후 필터링
-                retriever_type="similarity",
+                retriever_type=self.retriever_type,
                 filter_criteria=None
             )
 
@@ -143,7 +149,7 @@ class ChatManager:
                 db_type="subtopic",
                 query=query,
                 k=20 if meeting_id else 10,  # 넉넉하게 검색 후 필터링
-                retriever_type="similarity",
+                retriever_type=self.retriever_type,
                 filter_criteria=None
             )
 

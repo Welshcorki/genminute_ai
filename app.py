@@ -64,8 +64,8 @@ stt_manager = STTManager()
 # VectorDBManager에 DatabaseManager 인스턴스 주입
 vdb_manager.db_manager = db
 
-# ChatManager 초기화 (self_query 리트리버 사용)
-chat_manager = ChatManager(vdb_manager, retriever_type="self_query")
+# ChatManager 초기화 (similarity 리트리버 사용)
+chat_manager = ChatManager(vdb_manager, retriever_type="similarity")
 
 # --- 유틸리티 함수 ---
 def allowed_file(filename):

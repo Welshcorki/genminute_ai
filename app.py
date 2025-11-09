@@ -766,6 +766,182 @@ def script_input_page():
     """스크립트 입력 페이지를 렌더링합니다."""
     return render_template("script_input.html")
 
+@app.route("/test-summary")
+@admin_required
+def test_summary_page():
+    """요약 생성 테스트 페이지 (Admin 전용)"""
+    return render_template("test_summary.html")
+
+@app.route("/api/test_summary", methods=["POST"])
+@admin_required
+def test_summary_api():
+    """요약 생성 테스트 API"""
+    try:
+        data = request.get_json()
+        text = data.get("text", "").strip()
+        title = data.get("title", "테스트 회의").strip()
+
+        if not text:
+            return jsonify({"success": False, "error": "텍스트를 입력해주세요."}), 400
+
+        # subtopic_generate 호출
+        summary_content = stt_manager.subtopic_generate(title, text)
+
+        if summary_content:
+            return jsonify({
+                "success": True,
+                "summary": summary_content
+            })
+        else:
+            return jsonify({"success": False, "error": "요약 생성에 실패했습니다."}), 500
+
+    except Exception as e:
+        print(f"❌ 요약 테스트 API 오류: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({"success": False, "error": str(e)}), 500
+
+@app.route("/test-mindmap")
+@admin_required
+def test_mindmap_page():
+    """마인드맵 생성 테스트 페이지 (Admin 전용)"""
+    return render_template("test_mindmap.html")
+
+@app.route("/api/test_mindmap", methods=["POST"])
+@admin_required
+def test_mindmap_api():
+    """마인드맵 생성 테스트 API"""
+    try:
+        data = request.get_json()
+        summary_text = data.get("summary_text", "").strip()
+        title = data.get("title", "테스트 회의").strip()
+
+        if not summary_text:
+            return jsonify({"success": False, "error": "요약 텍스트를 입력해주세요."}), 400
+
+        # extract_mindmap_keywords 호출
+        mindmap_content = stt_manager.extract_mindmap_keywords(summary_text, title)
+
+        if mindmap_content:
+            return jsonify({
+                "success": True,
+                "mindmap": mindmap_content
+            })
+        else:
+            return jsonify({"success": False, "error": "마인드맵 생성에 실패했습니다."}), 500
+
+    except Exception as e:
+        print(f"❌ 마인드맵 테스트 API 오류: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({"success": False, "error": str(e)}), 500
+
+@app.route("/test-stt")
+@admin_required
+def test_stt_page():
+    """STT 테스트 페이지 (Admin 전용)"""
+    return render_template("test_stt.html")
+
+@app.route("/test-minutes")
+@admin_required
+def test_minutes_page():
+    """회의록 생성 테스트 페이지 (Admin 전용)"""
+    return render_template("test_minutes.html")
+
+@app.route("/api/test_minutes", methods=["POST"])
+@admin_required
+def test_minutes_api():
+    """회의록 생성 테스트 API"""
+    try:
+        data = request.get_json()
+        summary_text = data.get("summary_text", "").strip()
+        transcript_text = data.get("transcript_text", "").strip()
+        title = data.get("title", "테스트 회의").strip()
+
+        if not summary_text:
+            return jsonify({"success": False, "error": "요약 텍스트를 입력해주세요."}), 400
+
+        # transcript_text가 없으면 summary_text를 사용
+        if not transcript_text:
+            transcript_text = summary_text
+
+        # meeting_date는 현재 시간으로 설정
+        from datetime import datetime
+        meeting_date = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+        # generate_minutes 호출
+        minutes_content = stt_manager.generate_minutes(title, transcript_text, summary_text, meeting_date)
+
+        if minutes_content:
+            return jsonify({
+                "success": True,
+                "minutes": minutes_content
+            })
+        else:
+            return jsonify({"success": False, "error": "회의록 생성에 실패했습니다."}), 500
+
+    except Exception as e:
+        print(f"❌ 회의록 테스트 API 오류: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({"success": False, "error": str(e)}), 500
+
+@app.route("/api/test_stt", methods=["POST"])
+@admin_required
+def test_stt_api():
+    """STT 테스트 API"""
+    try:
+        # 파일 확인
+        if 'audio_file' not in request.files:
+            return jsonify({"success": False, "error": "파일을 선택해주세요."}), 400
+
+        file = request.files['audio_file']
+        if file.filename == '':
+            return jsonify({"success": False, "error": "파일을 선택해주세요."}), 400
+
+        if not allowed_file(file.filename):
+            return jsonify({"success": False, "error": "지원하지 않는 파일 형식입니다."}), 400
+
+        # 임시 파일로 저장
+        import tempfile
+        import os
+        from datetime import datetime
+
+        temp_dir = tempfile.gettempdir()
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        filename = f"test_stt_{timestamp}_{file.filename}"
+        temp_path = os.path.join(temp_dir, filename)
+
+        file.save(temp_path)
+
+        # STT 처리
+        segments = stt_manager.transcribe_audio(temp_path, file.filename)
+
+        # 임시 파일 삭제
+        if os.path.exists(temp_path):
+            os.remove(temp_path)
+
+        if segments:
+            # 세그먼트를 텍스트로 변환
+            transcript_text = "\n".join([
+                f"Speaker {seg['speaker_label']}: {seg['segment']}"
+                for seg in segments
+            ])
+
+            return jsonify({
+                "success": True,
+                "segments": segments,
+                "transcript_text": transcript_text
+            })
+        else:
+            return jsonify({"success": False, "error": "음성 인식에 실패했습니다."}), 500
+
+    except Exception as e:
+        print(f"❌ STT 테스트 API 오류: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({"success": False, "error": str(e)}), 500
+
 @app.route("/api/check_summary/<string:meeting_id>", methods=["GET"])
 @login_required
 def check_summary(meeting_id):

@@ -21,9 +21,13 @@
                 <li class="nav-item" data-page="shared_notes"><a href="{{ url_for('shared_notes') }}"><i class="fa-solid fa-share-nodes"></i> 공유 노트 보기</a></li>
                 {% if is_admin %}
                 <li class="nav-header">Debug</li>
-                <li class="nav-item" data-page="script_input_page"><a href="{{ url_for('script_input_page') }}"><i class="fa-solid fa-file-lines"></i> 스크립트입력</a></li>
+                <li class="nav-item" data-page="script_input_page"><a href="{{ url_for('script_input_page') }}"><i class="fa-solid fa-file-lines"></i> 파이프라인 (텍스트)</a></li>
+                <li class="nav-item" data-page="test_stt_page"><a href="{{ url_for('test_stt_page') }}"><i class="fa-solid fa-microphone"></i> 파이프라인 (오디오)</a></li>
                 <li class="nav-item" data-page="retriever_page"><a href="{{ url_for('retriever_page') }}"><i class="fa-solid fa-magnifying-glass"></i> 리트리버</a></li>
                 <li class="nav-item" data-page="summary_template_page"><a href="{{ url_for('summary_template_page') }}"><i class="fa-solid fa-list-check"></i> 요약/템플릿</a></li>
+                <li class="nav-item" data-page="test_summary_page"><a href="{{ url_for('test_summary_page') }}"><i class="fa-solid fa-flask"></i> 요약 테스트</a></li>
+                <li class="nav-item" data-page="test_minutes_page"><a href="{{ url_for('test_minutes_page') }}"><i class="fa-solid fa-file-contract"></i> 회의록 테스트</a></li>
+                <li class="nav-item" data-page="test_mindmap_page"><a href="{{ url_for('test_mindmap_page') }}"><i class="fa-solid fa-sitemap"></i> 마인드맵 테스트</a></li>
                 {% endif %}
             </ul>
 
@@ -98,8 +102,12 @@
                 '/notes': 'list_notes',
                 '/shared-notes': 'shared_notes',
                 '/script-input': 'script_input_page',
+                '/test-stt': 'test_stt_page',
                 '/retriever': 'retriever_page',
-                '/summary_template': 'summary_template_page'
+                '/summary_template': 'summary_template_page',
+                '/test-summary': 'test_summary_page',
+                '/test-minutes': 'test_minutes_page',
+                '/test-mindmap': 'test_mindmap_page'
             };
 
             // 현재 경로에 맞는 data-page 찾기

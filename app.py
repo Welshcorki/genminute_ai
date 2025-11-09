@@ -102,7 +102,14 @@ def convert_video_to_audio(video_path, audio_path):
             audio_path
         ]
 
-        result = subprocess.run(command, capture_output=True, text=True, timeout=300)
+        result = subprocess.run(
+            command,
+            capture_output=True,
+            text=True,
+            encoding='utf-8',
+            errors='ignore',
+            timeout=300
+        )
 
         if result.returncode == 0:
             print(f"✅ 비디오 → 오디오 변환 성공: {audio_path}")
@@ -563,6 +570,17 @@ def list_notes():
         return render_template("notes.html", meetings=meetings)
     except Exception as e:
         return render_template("index.html", error=f"노트 목록을 불러오는 중 오류가 발생했습니다: {e}")
+
+@app.route("/notes_json")
+@login_required
+def list_notes_json():
+    """노트 목록을 JSON으로 반환 (업로드 상태 확인용)"""
+    try:
+        user_id = session['user_id']
+        meetings = get_user_meetings(user_id)
+        return jsonify({"success": True, "meetings": meetings})
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
 
 @app.route("/shared-notes")
 @login_required

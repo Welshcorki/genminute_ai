@@ -548,8 +548,8 @@ document.addEventListener('DOMContentLoaded', () => {
                     if (progressTip) {
                         progressTip.innerHTML = `
                             <div style="display: flex; gap: 1rem; justify-content: center; margin-top: 2rem;">
-                                <button id="error-close-btn" class="btn-secondary" style="padding: 0.75rem 2rem;">닫기</button>
-                                <button id="error-retry-btn" class="btn-primary" style="padding: 0.75rem 2rem;">다시 시도</button>
+                                <button id="error-retry-btn" class="btn-primary" style="padding: 0.75rem 2rem; min-width: 120px;">다시 시도</button>
+                                <button id="error-close-btn" class="btn-secondary" style="padding: 0.75rem 2rem; min-width: 120px;">닫기</button>
                             </div>
                         `;
 
@@ -588,8 +588,10 @@ document.addEventListener('DOMContentLoaded', () => {
                             // 모달 초기화
                             resetProgressModal();
 
-                            // 폼 자동 재제출 (선택사항)
-                            // uploadForm.dispatchEvent(new Event('submit'));
+                            // 폼 자동 재제출
+                            setTimeout(() => {
+                                uploadForm.dispatchEvent(new Event('submit'));
+                            }, 300);
                         });
                     }
                     break;
@@ -812,7 +814,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // ==================== 중복 업로드 방지 헬퍼 함수 ====================
 
     // 페이지 로드 시 업로드 상태 체크
-    function checkUploadStatus() {
+    async function checkUploadStatus() {
         const uploadInProgress = sessionStorage.getItem('upload_in_progress');
         const uploadStartTime = sessionStorage.getItem('upload_start_time');
 
@@ -830,6 +832,35 @@ document.addEventListener('DOMContentLoaded', () => {
             sessionStorage.removeItem('upload_in_progress');
             sessionStorage.removeItem('upload_start_time');
             return;
+        }
+
+        // 실제로 새 노트가 생성되었는지 확인 (최근 5분 이내)
+        try {
+            const fiveMinutesAgo = Date.now() - (5 * 60 * 1000);
+            const response = await fetch('/notes_json');
+
+            if (response.ok) {
+                const data = await response.json();
+
+                // 최근 생성된 노트가 있는지 확인
+                if (data.meetings && data.meetings.length > 0) {
+                    const latestMeeting = data.meetings[0];
+                    const meetingTime = new Date(latestMeeting.meeting_date).getTime();
+
+                    // upload_start_time 이후에 생성된 노트가 있으면 작업 완료된 것
+                    if (meetingTime >= startTime) {
+                        console.log('✅ 업로드 작업 완료 확인 - 플래그 제거');
+                        sessionStorage.removeItem('upload_in_progress');
+                        sessionStorage.removeItem('upload_start_time');
+
+                        // 완료된 노트로 자동 이동
+                        window.location.href = `/view/${latestMeeting.meeting_id}`;
+                        return;
+                    }
+                }
+            }
+        } catch (error) {
+            console.error('노트 확인 중 오류:', error);
         }
 
         // 업로드 진행 중 - UI 잠금

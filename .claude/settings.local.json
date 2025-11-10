@@ -12,7 +12,8 @@
       "Bash(for file in app.py utils/*.py)",
       "Bash(do python3 -m py_compile:*)",
       "Bash(echo:*)",
-      "Bash(done)"
+      "Bash(done)",
+      "WebSearch"
     ],
     "deny": [],
     "ask": []

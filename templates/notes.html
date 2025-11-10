@@ -8,10 +8,21 @@
     <div class="viewer-container"> {# viewer-container 스타일 재사용 #}
         <header class="viewer-header notes-header">
             <h1>모든 노트</h1>
-            <div class="bulk-actions">
-                <button id="share-btn" class="btn-outline" disabled>공유</button>
-                <button id="select-all-btn" class="btn-outline" disabled>모두선택</button>
-                <button id="bulk-delete-btn" class="btn-outline" disabled>삭제</button>
+            <div class="header-controls">
+                <div class="sort-controls">
+                    <label for="sort-select">정렬:</label>
+                    <select id="sort-select" class="sort-select">
+                        <option value="date-desc">날짜 (최신순)</option>
+                        <option value="date-asc">날짜 (오래된순)</option>
+                        <option value="title-asc">제목 (가나다순)</option>
+                        <option value="title-desc">제목 (가나다 역순)</option>
+                    </select>
+                </div>
+                <div class="bulk-actions">
+                    <button id="share-btn" class="btn-outline" disabled>공유</button>
+                    <button id="select-all-btn" class="btn-outline" disabled>모두선택</button>
+                    <button id="bulk-delete-btn" class="btn-outline" disabled>삭제</button>
+                </div>
             </div>
         </header>
 
@@ -75,6 +86,45 @@
 
 .notes-header h1 {
     margin: 0;
+}
+
+/* 헤더 컨트롤 */
+.header-controls {
+    display: flex;
+    align-items: center;
+    gap: 1.5rem;
+}
+
+/* 정렬 컨트롤 */
+.sort-controls {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.sort-controls label {
+    font-size: 1rem;
+    color: #555;
+    white-space: nowrap;
+}
+
+.sort-select {
+    padding: 0.5rem 1rem;
+    border: 2px solid #ddd;
+    border-radius: 4px;
+    font-size: 1rem;
+    cursor: pointer;
+    background: white;
+    transition: border-color 0.2s ease;
+}
+
+.sort-select:hover {
+    border-color: #3498db;
+}
+
+.sort-select:focus {
+    outline: none;
+    border-color: #3498db;
 }
 
 /* 일괄 작업 버튼 */
@@ -238,6 +288,86 @@
 
 {% block scripts %}
 <script>
+// === 정렬 기능 ===
+const sortSelect = document.getElementById('sort-select');
+const notesList = document.querySelector('.notes-list');
+
+// 저장된 정렬 설정 불러오기
+const savedSort = localStorage.getItem('notes-sort');
+if (savedSort) {
+    sortSelect.value = savedSort;
+    sortNotes(savedSort);
+}
+
+// 정렬 변경 이벤트
+sortSelect.addEventListener('change', (e) => {
+    const sortValue = e.target.value;
+    localStorage.setItem('notes-sort', sortValue);
+    sortNotes(sortValue);
+});
+
+function sortNotes(sortType) {
+    // note-item-wrapper들을 배열로 변환
+    const noteWrappers = Array.from(document.querySelectorAll('.note-item-wrapper'));
+
+    if (noteWrappers.length === 0) {
+        console.log('정렬할 노트가 없습니다.');
+        return;
+    }
+
+    console.log(`정렬 시작: ${sortType}, 노트 수: ${noteWrappers.length}`);
+
+    // 정렬 수행
+    noteWrappers.sort((a, b) => {
+        const titleElementA = a.querySelector('.note-item-title');
+        const titleElementB = b.querySelector('.note-item-title');
+        const dateElementA = a.querySelector('.note-item-date');
+        const dateElementB = b.querySelector('.note-item-date');
+
+        if (!titleElementA || !titleElementB || !dateElementA || !dateElementB) {
+            console.warn('정렬 중 요소를 찾을 수 없습니다.');
+            return 0;
+        }
+
+        const titleA = titleElementA.textContent.trim();
+        const titleB = titleElementB.textContent.trim();
+        const dateA = dateElementA.textContent.trim();
+        const dateB = dateElementB.textContent.trim();
+
+        let result = 0;
+
+        switch (sortType) {
+            case 'date-desc': // 날짜 최신순 (기본)
+                result = dateB.localeCompare(dateA);
+                break;
+
+            case 'date-asc': // 날짜 오래된순
+                result = dateA.localeCompare(dateB);
+                break;
+
+            case 'title-asc': // 제목 가나다순
+                result = titleA.localeCompare(titleB, 'ko');
+                break;
+
+            case 'title-desc': // 제목 가나다 역순
+                result = titleB.localeCompare(titleA, 'ko');
+                break;
+
+            default:
+                result = 0;
+        }
+
+        return result;
+    });
+
+    // DOM에 재배치
+    noteWrappers.forEach(wrapper => {
+        notesList.appendChild(wrapper);
+    });
+
+    console.log('정렬 완료');
+}
+
 // === 체크박스 및 일괄 작업 관리 ===
 const checkboxes = document.querySelectorAll('.note-checkbox');
 const selectAllBtn = document.getElementById('select-all-btn');

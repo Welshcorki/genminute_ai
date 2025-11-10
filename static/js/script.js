@@ -56,14 +56,16 @@ document.addEventListener('DOMContentLoaded', () => {
     // 챗봇 상태 복원 함수
     function restoreChatbotState() {
         const savedState = sessionStorage.getItem(CHATBOT_STATE_KEY);
-        if (savedState === 'open') {
+
+        // 명시적으로 닫힌 상태가 아니면 열린 상태로 시작 (기본값: 열림)
+        if (savedState !== 'closed') {
             // transition 비활성화 (애니메이션 방지)
             chatbotSidebar.classList.add('no-transition');
             if (appContainer) {
                 appContainer.classList.add('no-transition');
             }
 
-            // 챗봇이 열려있던 상태였으면 다시 열기
+            // 챗봇 열기
             chatbotSidebar.classList.add('open');
             chatbotToggleTab.classList.add('hidden');
             if (appContainer) {
@@ -80,9 +82,15 @@ document.addEventListener('DOMContentLoaded', () => {
                 });
             });
 
-            console.log('✅ 챗봇 열림 상태 복원 (애니메이션 없음)');
+            // 처음 로그인이면 'open' 상태 저장
+            if (!savedState) {
+                sessionStorage.setItem(CHATBOT_STATE_KEY, 'open');
+                console.log('✅ 챗봇 기본 열림 상태로 시작');
+            } else {
+                console.log('✅ 챗봇 열림 상태 복원 (애니메이션 없음)');
+            }
         } else {
-            // 명시적으로 닫힌 상태이거나 저장된 값이 없으면 닫힌 상태 유지
+            // 명시적으로 닫힌 상태인 경우에만 닫힌 상태 유지
             console.log('ℹ️ 챗봇 닫힘 상태 유지');
         }
     }

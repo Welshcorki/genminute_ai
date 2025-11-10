@@ -219,7 +219,13 @@ def get_user_meetings(user_id: int) -> List[Dict]:
             """, (user_id,))
 
         meetings = cursor.fetchall()
-        return [dict(meeting) for meeting in meetings]
+        # 'meeting_date'를 'date'로 키 이름 변경 (템플릿 호환성)
+        result = []
+        for meeting in meetings:
+            meeting_dict = dict(meeting)
+            meeting_dict['date'] = meeting_dict.pop('meeting_date', None)
+            result.append(meeting_dict)
+        return result
 
     finally:
         conn.close()
@@ -255,7 +261,13 @@ def get_shared_meetings(user_id: int) -> List[Dict]:
         """, (user_id,))
 
         meetings = cursor.fetchall()
-        return [dict(meeting) for meeting in meetings]
+        # 'meeting_date'를 'date'로 키 이름 변경 (템플릿 호환성)
+        result = []
+        for meeting in meetings:
+            meeting_dict = dict(meeting)
+            meeting_dict['date'] = meeting_dict.pop('meeting_date', None)
+            result.append(meeting_dict)
+        return result
 
     finally:
         conn.close()

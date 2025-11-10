@@ -428,6 +428,12 @@ document.addEventListener('DOMContentLoaded', () => {
                 progressModal.classList.add('active');
             }
 
+            // 업로드 단계 즉시 활성화 (SSE 메시지 없이도 표시)
+            const stepUpload = document.getElementById('step-upload');
+            if (stepUpload) {
+                stepUpload.classList.add('active');
+            }
+
             // SSE로 업로드 요청
             try {
                 // 일반 fetch로 먼저 시작 (파일 업로드)
@@ -481,9 +487,9 @@ document.addEventListener('DOMContentLoaded', () => {
             const stepSummary = document.getElementById('step-summary');
             const stepMindmap = document.getElementById('step-mindmap');
 
-            // 모든 단계 초기화
+            // 모든 단계의 active만 제거 (completed는 유지!)
             [stepUpload, stepSTT, stepSummary, stepMindmap].forEach(el => {
-                if (el) el.classList.remove('active', 'completed');
+                if (el) el.classList.remove('active');
             });
 
             // 현재 단계 업데이트
@@ -497,6 +503,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 case 'stt':
                     if (progressIcon) progressIcon.textContent = data.icon || '🎤';
                     if (progressStatus) progressStatus.textContent = data.message;
+                    // 이전 단계들 completed 설정
                     if (stepUpload) stepUpload.classList.add('completed');
                     if (stepSTT) stepSTT.classList.add('active');
                     break;
@@ -504,6 +511,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 case 'summary':
                     if (progressIcon) progressIcon.textContent = data.icon || '📝';
                     if (progressStatus) progressStatus.textContent = data.message;
+                    // 이전 단계들 completed 설정
+                    if (stepUpload) stepUpload.classList.add('completed');
                     if (stepSTT) stepSTT.classList.add('completed');
                     if (stepSummary) stepSummary.classList.add('active');
                     break;
@@ -511,6 +520,9 @@ document.addEventListener('DOMContentLoaded', () => {
                 case 'mindmap':
                     if (progressIcon) progressIcon.textContent = data.icon || '🗺️';
                     if (progressStatus) progressStatus.textContent = data.message;
+                    // 이전 단계들 completed 설정
+                    if (stepUpload) stepUpload.classList.add('completed');
+                    if (stepSTT) stepSTT.classList.add('completed');
                     if (stepSummary) stepSummary.classList.add('completed');
                     if (stepMindmap) stepMindmap.classList.add('active');
                     break;
@@ -518,6 +530,10 @@ document.addEventListener('DOMContentLoaded', () => {
                 case 'complete':
                     if (progressIcon) progressIcon.textContent = data.icon || '✅';
                     if (progressStatus) progressStatus.textContent = data.message;
+                    // 모든 단계 completed 설정
+                    if (stepUpload) stepUpload.classList.add('completed');
+                    if (stepSTT) stepSTT.classList.add('completed');
+                    if (stepSummary) stepSummary.classList.add('completed');
                     if (stepMindmap) stepMindmap.classList.add('completed');
 
                     // === 중복 방지: 업로드 완료 ===

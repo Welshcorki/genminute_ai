@@ -117,6 +117,22 @@
                 </div>
             </div>
         </div>
+
+        <!-- 회의록 생성 진행 모달 -->
+        <div id="minutes-progress-modal" class="minutes-progress-modal">
+            <div class="minutes-progress-modal-content">
+                <!-- 진행 아이콘 -->
+                <div class="minutes-progress-icon">📄</div>
+
+                <!-- 상태 메시지 -->
+                <p id="minutes-progress-status">회의록을 생성하고 있습니다...</p>
+
+                <!-- 로딩 스피너 -->
+                <div class="minutes-spinner"></div>
+
+                <p class="minutes-progress-tip">잠시만 기다려주세요</p>
+            </div>
+        </div>
     </div>
 </main>
 
@@ -572,6 +588,77 @@
     #mindmap-container {
         min-height: 400px;
     }
+}
+
+/* ==================== 회의록 생성 진행 모달 스타일 ==================== */
+.minutes-progress-modal {
+    display: none;
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(0, 0, 0, 0.7);
+    z-index: 10000;
+    align-items: center;
+    justify-content: center;
+}
+
+.minutes-progress-modal.active {
+    display: flex;
+}
+
+.minutes-progress-modal-content {
+    background-color: white;
+    border-radius: 12px;
+    padding: 3rem;
+    width: 90%;
+    max-width: 500px;
+    text-align: center;
+    box-shadow: 0 10px 40px rgba(0, 0, 0, 0.3);
+}
+
+.minutes-progress-icon {
+    font-size: 5rem;
+    margin-bottom: 1.5rem;
+    animation: minutesPulse 1.5s ease-in-out infinite;
+}
+
+@keyframes minutesPulse {
+    0%, 100% {
+        transform: scale(1);
+    }
+    50% {
+        transform: scale(1.1);
+    }
+}
+
+#minutes-progress-status {
+    color: #333;
+    margin-bottom: 1.5rem;
+    font-size: 1.2rem;
+    font-weight: 600;
+}
+
+.minutes-spinner {
+    margin: 2rem auto;
+    width: 50px;
+    height: 50px;
+    border: 4px solid #f3f3f3;
+    border-top: 4px solid #3498db;
+    border-radius: 50%;
+    animation: minutesSpin 1s linear infinite;
+}
+
+@keyframes minutesSpin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+}
+
+.minutes-progress-tip {
+    color: #999;
+    font-size: 0.9rem;
+    margin-top: 1rem;
 }
 </style>
 

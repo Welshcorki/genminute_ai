@@ -284,25 +284,22 @@ document.addEventListener('DOMContentLoaded', () => {
     // 회의록 생성 버튼 이벤트 리스너
     function attachMinutesButtonListener() {
         const generateMinutesButton = document.getElementById('generate-minutes-button');
+        const minutesProgressModal = document.getElementById('minutes-progress-modal');
+        const minutesProgressStatus = document.getElementById('minutes-progress-status');
 
         if (generateMinutesButton) {
             generateMinutesButton.addEventListener('click', async () => {
                 if (typeof MEETING_ID === 'undefined' || !MEETING_ID) {
+                    // 시스템 오류만 alert 유지
                     alert('회의 ID를 찾을 수 없습니다.');
                     return;
                 }
 
-                if (!confirm('회의록을 생성하시겠습니까? 생성에는 시간이 소요될 수 있습니다.')) {
-                    return;
-                }
-
+                // confirm 창 제거 - 바로 시작
                 try {
-                    // 버튼 비활성화 및 로딩 표시
-                    generateMinutesButton.disabled = true;
-                    generateMinutesButton.textContent = '회의록 생성 중...';
-
-                    // 회의록 컨테이너에 로딩 메시지 표시
-                    minutesContainer.innerHTML = '<div class="minutes-loading">회의록을 생성하는 중입니다. 잠시만 기다려주세요...</div>';
+                    // 진행 모달 표시
+                    minutesProgressModal.classList.add('active');
+                    minutesProgressStatus.textContent = '회의록을 생성하고 있습니다...';
 
                     const response = await fetch(`/api/generate_minutes/${MEETING_ID}`, {
                         method: 'POST',
@@ -314,22 +311,47 @@ document.addEventListener('DOMContentLoaded', () => {
                     const data = await response.json();
 
                     if (data.success) {
-                        // 회의록 내용을 마크다운에서 HTML로 변환하여 표시
-                        displayMinutes(data.minutes);
-                        minutesGenerated = true; // 회의록 생성 완료 표시
-                        alert('회의록이 성공적으로 생성 및 저장되었습니다!');
+                        // 완료 UI 표시 (노트 생성과 동일하게)
+                        const minutesProgressIcon = document.querySelector('.minutes-progress-icon');
+                        if (minutesProgressIcon) minutesProgressIcon.textContent = '✅';
+                        minutesProgressStatus.textContent = '회의록 생성 완료!';
+
+                        // 1초 후 모달 닫기 및 회의록 표시
+                        setTimeout(() => {
+                            minutesProgressModal.classList.remove('active');
+
+                            // 회의록 내용을 마크다운에서 HTML로 변환하여 표시
+                            displayMinutes(data.minutes);
+                            minutesGenerated = true; // 회의록 생성 완료 표시
+
+                            // 모달 초기화 (다음 사용을 위해)
+                            if (minutesProgressIcon) minutesProgressIcon.textContent = '📄';
+                            minutesProgressStatus.textContent = '회의록을 생성하고 있습니다...';
+                        }, 1000);
                     } else {
+                        // 모달 닫기
+                        minutesProgressModal.classList.remove('active');
+
+                        // 오류 메시지를 UI에 표시 (alert 제거)
                         minutesContainer.innerHTML = `<div class="minutes-error">회의록 생성 실패: ${data.error}</div>`;
                         // 버튼 다시 표시
                         updateMinutesTab();
-                        alert(`회의록 생성 실패: ${data.error}`);
                     }
                 } catch (error) {
                     console.error('회의록 생성 중 오류 발생:', error);
+
+                    // 모달 닫기
+                    minutesProgressModal.classList.remove('active');
+
+                    // 오류 메시지를 UI에 표시 (alert 제거)
                     minutesContainer.innerHTML = '<div class="minutes-error">회의록 생성 중 오류가 발생했습니다.</div>';
                     // 버튼 다시 표시
                     updateMinutesTab();
-                    alert('회의록 생성 중 오류가 발생했습니다.');
+
+                    // 모달 초기화 (다음 사용을 위해)
+                    const minutesProgressIcon = document.querySelector('.minutes-progress-icon');
+                    if (minutesProgressIcon) minutesProgressIcon.textContent = '📄';
+                    minutesProgressStatus.textContent = '회의록을 생성하고 있습니다...';
                 }
             });
         }

@@ -1,6 +1,8 @@
-# Minute AI - AI 기반 회의록 자동화 플랫폼
+# genminute
 
-서울의회(seoulloc) 회의록을 Google Gemini AI를 활용하여 자동 전사(STT), 요약, 회의록 생성, 마인드맵 제작 및 지능형 Q&A를 제공하는 Flask 웹 애플리케이션입니다.
+AI 기반 회의록 자동 생성 시스템
+
+회의 음성/영상을 업로드하면 자동으로 음성인식(STT), 회의록 생성, 마인드맵 생성, RAG 기반 챗봇을 제공하는 웹 애플리케이션입니다.
 
 ## 주요 기능
 
@@ -305,16 +307,11 @@ Content: "### 주제\n* 포인트 1\n* 포인트 2..." 형식
 
 #### 2.1 가상환경 생성
 ```bash
-python -m venv venv
-source venv/bin/activate  # Windows: venv\Scripts\activate
+conda env create -f environment_crossplatform.yml
+conda activate genminute
 ```
 
-#### 2.2 패키지 설치
-```bash
-pip install -r requirements.txt
-```
-
-#### 2.3 환경 변수 설정
+#### 2.2 환경 변수 설정
 `.env` 파일 생성 (프로젝트 루트):
 ```env
 # Flask 설정
@@ -339,23 +336,26 @@ OPENAI_API_KEY=<OpenAI API 키>
 ADMIN_EMAILS=admin1@example.com,admin2@example.com
 ```
 
-#### 2.4 Firebase 서비스 계정 키
+#### 2.3 Firebase 서비스 계정 키
 프로젝트 루트에 `firebase-adminsdk.json` 파일 배치:
 1. Firebase Console → Project Settings → Service Accounts
 2. "Generate New Private Key" 클릭
 3. 다운로드한 JSON 파일을 `firebase-adminsdk.json`로 저장
 
-### 3. 데이터베이스 초기화
-```bash
-python init_db.py
-```
-
-### 4. 애플리케이션 실행
+### 3. 애플리케이션 실행
 ```bash
 python app.py
 ```
 
 브라우저에서 `http://localhost:5050` 접속
+
+**참고:** 데이터베이스 테이블은 `app.py` 실행 시 자동으로 생성됩니다. 별도의 초기화 스크립트 실행이 필요 없습니다.
+
+**선택사항 - 수동 DB 초기화:**
+```bash
+# DB를 완전히 재생성하거나 초기화하고 싶을 때만 실행
+python init_db.py
+```
 
 ---
 
